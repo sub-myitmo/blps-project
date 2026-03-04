@@ -28,6 +28,7 @@ public class Comment {
     @JoinColumn(name = "campaign_id")
     private AdvertisingCampaign campaign;
 
+    @Column(name = "moderation_comment", nullable = false)
     private String moderationComment;
 
     @PrePersist

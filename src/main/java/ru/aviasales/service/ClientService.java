@@ -3,14 +3,14 @@ package ru.aviasales.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.aviasales.dal.model.*;
 import ru.aviasales.service.dto.CampaignRequest;
 import ru.aviasales.service.dto.CampaignResponse;
-import ru.aviasales.dal.model.AdvertisingCampaign;
-import ru.aviasales.dal.model.Client;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.ClientRepository;
+import ru.aviasales.service.dto.ClientActionRequest;
+import ru.aviasales.service.dto.ModeratorActionRequest;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Service
@@ -24,16 +24,7 @@ public class ClientService {
     public CampaignResponse createCampaign(String apiKey, CampaignRequest request) {
         Client client = clientRepository.findByApiKey(apiKey)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
-
-        // Валидация дат
-        if (request.getStartDate() != null && request.getEndDate() != null) {
-            if (request.getStartDate().isAfter(request.getEndDate())) {
-                throw new RuntimeException("Start date must be before end date");
-            }
-            if (request.getStartDate().isBefore(LocalDateTime.now())) {
-                throw new RuntimeException("Start date cannot be in the past");
-            }
-        }
+        validateDates(request.getStartDate(), request.getEndDate());
 
         AdvertisingCampaign campaign = new AdvertisingCampaign();
         campaign.setName(request.getName());
@@ -43,72 +34,72 @@ public class ClientService {
         campaign.setStartDate(request.getStartDate());
         campaign.setEndDate(request.getEndDate());
         campaign.setClient(client);
-        campaign.setStatus(AdvertisingCampaign.CampaignStatus.PENDING);
+        campaign.setStatus(CampaignStatus.PENDING);
 
         AdvertisingCampaign saved = campaignRepository.save(campaign);
         return CampaignResponse.fromEntity(saved);
     }
 
     @Transactional
-    public CampaignResponse pauseCampaign(String apiKey, Long campaignId) {
+    public CampaignResponse getCampaign(String apiKey, Long campaignId) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        validateAccessOrThrow(apiKey, campaign);
+
+        return CampaignResponse.fromEntity(campaign);
+    }
+
+    @Transactional
+    public CampaignResponse actionCampaign(String apiKey, Long campaignId,
+                                           ClientActionRequest request) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        validateAccessOrThrow(apiKey, campaign);
+
+        switch (request.getAction()) {
+            case SIGN_DOC:
+                // TODO: логика подписания
+                campaign.transitionTo(CampaignStatus.WAITING_START);
+                break;
+            case RESUME:
+                validateDates(request.getStartDate(), request.getEndDate());
+                campaign.transitionTo(CampaignStatus.WAITING_START);
+                campaign.setStartDate(request.getStartDate());
+                campaign.setEndDate(request.getEndDate());
+                break;
+            case PAUSE:
+                campaign.transitionTo(CampaignStatus.PAUSED_BY_CLIENT);
+                break;
+            default:
+                throw new RuntimeException("Invalid action for client");
+        }
+
+        return CampaignResponse.fromEntity(campaignRepository.save(campaign));
+    }
+
+    private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
+        return campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new RuntimeException("Campaign not found"));
+    }
+
+    private void validateAccessOrThrow(String apiKey, AdvertisingCampaign campaign) {
         Client client = clientRepository.findByApiKey(apiKey)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
-
-        AdvertisingCampaign campaign = campaignRepository.findById(campaignId)
-                .orElseThrow(() -> new RuntimeException("Campaign not found"));
 
         if (!campaign.getClient().getId().equals(client.getId())) {
             throw new RuntimeException("Access denied");
         }
-
-        if (campaign.getStatus() == AdvertisingCampaign.CampaignStatus.ACTIVE) {
-            campaign.setStatus(AdvertisingCampaign.CampaignStatus.PAUSED_BY_CLIENT);
-        } else {
-            throw new RuntimeException("Campaign is not active");
-        }
-
-        return CampaignResponse.fromEntity(campaignRepository.save(campaign));
     }
 
-    @Transactional
-    public CampaignResponse activeCampaign(String apiKey, Long campaignId) {
-        Client client = clientRepository.findByApiKey(apiKey)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
-
-        AdvertisingCampaign campaign = campaignRepository.findById(campaignId)
-                .orElseThrow(() -> new RuntimeException("Campaign not found"));
-
-        if (!campaign.getClient().getId().equals(client.getId())) {
-            throw new RuntimeException("Access denied");
+    private void validateDates(LocalDateTime startDate, LocalDateTime endDate) {
+        if (startDate == null) {
+            throw new RuntimeException("Start date must be not null");
         }
-
-        if (hasEnoughFunds(client, campaign.getDailyBudget())) {
-            campaign.setStatus(AdvertisingCampaign.CampaignStatus.ACTIVE);
-        } else {
-            campaign.setStatus(AdvertisingCampaign.CampaignStatus.FROZEN);
+        if (startDate.isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("Start date cannot be in the past");
         }
-
-        return CampaignResponse.fromEntity(campaignRepository.save(campaign));
-    }
-
-    @Transactional
-    public CampaignResponse signatureCampaign(String apiKey, Long campaignId) {
-        Client client = clientRepository.findByApiKey(apiKey)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
-
-        AdvertisingCampaign campaign = campaignRepository.findById(campaignId)
-                .orElseThrow(() -> new RuntimeException("Campaign not found"));
-
-        if (campaign.getStatus() == AdvertisingCampaign.CampaignStatus.AT_SIGNING_BY_MODERATOR) {
-            campaign.setStatus(AdvertisingCampaign.CampaignStatus.AT_SIGNING_BY_CLIENT);
-        } else {
-            throw new RuntimeException("Действие недоступно");
+        if (endDate != null) {
+            if (startDate.isAfter(endDate)) {
+                throw new RuntimeException("Start date must be before end date");
+            }
         }
-
-        return CampaignResponse.fromEntity(campaignRepository.save(campaign));
-    }
-
-    private boolean hasEnoughFunds(Client client, BigDecimal dailyBudget) {
-        return client.getBalance().compareTo(dailyBudget) >= 0;
     }
 }

@@ -6,7 +6,6 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.aviasales.service.dto.PaymentRequest;
 import ru.aviasales.dal.model.Client;
 import ru.aviasales.dal.model.Transaction;
-import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.ClientRepository;
 import ru.aviasales.dal.repository.TransactionRepository;
 
@@ -18,18 +17,15 @@ public class PaymentService {
 
     private final ClientRepository clientRepository;
     private final TransactionRepository transactionRepository;
-    private final AdvertisingCampaignRepository campaignRepository;
 
     @Transactional
     public BigDecimal deposit(String apiKey, PaymentRequest request) {
         Client client = clientRepository.findByApiKey(apiKey)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
 
-        // Пополнение баланса
         client.setBalance(client.getBalance().add(request.getAmount()));
         clientRepository.save(client);
 
-        // Сохраняем транзакцию
         Transaction transaction = new Transaction();
         transaction.setClient(client);
         transaction.setAmount(request.getAmount());

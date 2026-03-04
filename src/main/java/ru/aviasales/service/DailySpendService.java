@@ -6,6 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.aviasales.dal.model.AdvertisingCampaign;
+import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.dal.model.Client;
 import ru.aviasales.dal.model.Transaction;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
@@ -34,17 +35,12 @@ public class DailySpendService {
         log.info("Starting daily spending processing");
 
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
-        // Запускаем новые кампании, которые должны начаться сегодня
         startScheduledCampaigns(now);
-
-        // Завершаем кампании, у которых истек срок
         completeExpiredCampaigns(now);
 
-        // Списываем деньги за активные кампании
         List<AdvertisingCampaign> activeCampaigns = campaignRepository
-                .findByStatus(AdvertisingCampaign.CampaignStatus.ACTIVE);
+                .findByStatus(CampaignStatus.ACTIVE);
 
         // Группируем по клиентам
         Map<Client, List<AdvertisingCampaign>> campaignsByClient = activeCampaigns.stream()
@@ -54,12 +50,10 @@ public class DailySpendService {
             Client client = entry.getKey();
             List<AdvertisingCampaign> campaigns = entry.getValue();
 
-            // Считаем общую сумму к списанию за день
             BigDecimal totalToSpend = campaigns.stream()
                     .map(AdvertisingCampaign::getDailyBudget)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-            // Проверяем, хватит ли денег на балансе
             if (client.getBalance().compareTo(totalToSpend) >= 0) {
                 client.setBalance(client.getBalance().subtract(totalToSpend));
                 clientRepository.save(client);
@@ -74,7 +68,6 @@ public class DailySpendService {
                 log.info("Client {} spent {}. New balance: {}",
                         client.getApiKey(), totalToSpend, client.getBalance());
             } else {
-                // Не хватает денег - замораживаем все кампании клиента
                 log.warn("Client {} has insufficient funds. Freezing all campaigns.",
                         client.getApiKey());
                 campaignRepository.freezeAllClientCampaigns(client.getId());
@@ -89,11 +82,11 @@ public class DailySpendService {
 
         for (AdvertisingCampaign campaign : readyToStart) {
             if (campaign.getClient().getBalance().compareTo(campaign.getDailyBudget()) >= 0) {
-                campaign.setStatus(AdvertisingCampaign.CampaignStatus.ACTIVE);
+                campaign.transitionTo(CampaignStatus.ACTIVE);
                 campaignRepository.save(campaign);
                 log.info("Campaign {} started", campaign.getName());
             } else {
-                campaign.setStatus(AdvertisingCampaign.CampaignStatus.FROZEN);
+                campaign.transitionTo(CampaignStatus.FROZEN);
                 campaignRepository.save(campaign);
                 log.info("Campaign {} frozen due to insufficient funds", campaign.getName());
             }
@@ -104,7 +97,7 @@ public class DailySpendService {
         List<AdvertisingCampaign> expired = campaignRepository.findExpiredActive(now);
 
         for (AdvertisingCampaign campaign : expired) {
-            campaign.setStatus(AdvertisingCampaign.CampaignStatus.COMPLETED);
+            campaign.transitionTo(CampaignStatus.COMPLETED);
             campaignRepository.save(campaign);
             log.info("Campaign {} completed", campaign.getName());
         }

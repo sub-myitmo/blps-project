@@ -2,6 +2,7 @@ package ru.aviasales.service.dto;
 
 import lombok.Data;
 import ru.aviasales.dal.model.AdvertisingCampaign;
+import ru.aviasales.dal.model.CampaignStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -16,7 +17,7 @@ public class CampaignResponse {
     private BigDecimal dailyBudget;
     private LocalDateTime startDate;
     private LocalDateTime endDate;
-    private AdvertisingCampaign.CampaignStatus status;
+    private CampaignStatus status;
     private LocalDateTime createdAt;
     private List<CommentResponse> moderationComments;
 

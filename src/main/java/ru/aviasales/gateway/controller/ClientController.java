@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.aviasales.service.dto.CampaignRequest;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.ClientService;
+import ru.aviasales.service.dto.ClientActionRequest;
 
 @RestController
 @RequestMapping("/api/client/campaigns")
@@ -24,27 +25,20 @@ public class ClientController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/{id}/pause")
-    public ResponseEntity<CampaignResponse> pauseCampaign(
+    @PostMapping("/{id}")
+    public ResponseEntity<CampaignResponse> actionWithCampaign(
             @RequestHeader("Authorization") String apiKey,
-            @PathVariable Long id) {
-        CampaignResponse response = clientService.pauseCampaign(apiKey, id);
+            @PathVariable Long id,
+            @Valid @RequestBody ClientActionRequest request) {
+        CampaignResponse response = clientService.actionCampaign(apiKey, id, request);
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/{id}/resume")
-    public ResponseEntity<CampaignResponse> resumeCampaign(
+    @GetMapping("/{id}")
+    public ResponseEntity<CampaignResponse> getCampaign(
             @RequestHeader("Authorization") String apiKey,
             @PathVariable Long id) {
-        CampaignResponse response = clientService.activeCampaign(apiKey, id);
+        CampaignResponse response = clientService.getCampaign(apiKey, id);
         return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/{id}/signature")
-    public ResponseEntity<Void> signatureCampaign(
-            @RequestHeader("Authorization") String apiKey,
-            @PathVariable Long id) {
-        // логика по подписи документов
-        return null;
     }
 }

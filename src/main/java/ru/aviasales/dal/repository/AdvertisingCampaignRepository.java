@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.aviasales.dal.model.AdvertisingCampaign;
+import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.dal.model.Client;
 
 import java.time.LocalDateTime;
@@ -16,9 +17,9 @@ public interface AdvertisingCampaignRepository extends JpaRepository<Advertising
 
     List<AdvertisingCampaign> findByClient(Client client);
 
-    List<AdvertisingCampaign> findByStatus(AdvertisingCampaign.CampaignStatus status);
+    List<AdvertisingCampaign> findByStatus(CampaignStatus status);
 
-    @Query("SELECT c FROM AdvertisingCampaign c WHERE c.status = 'APPROVED' " +
+    @Query("SELECT c FROM AdvertisingCampaign c WHERE c.status = 'WAITING_START' " +
             "AND (c.startDate IS NULL OR c.startDate <= :now) " +
             "AND (c.endDate IS NULL OR c.endDate > :now)")
     List<AdvertisingCampaign> findReadyToStart(@Param("now") LocalDateTime now);
@@ -32,9 +33,4 @@ public interface AdvertisingCampaignRepository extends JpaRepository<Advertising
             "WHERE c.client.id = :clientId " +
             "AND c.status = 'ACTIVE'")
     void freezeAllClientCampaigns(@Param("clientId") Long clientId);
-
-    @Modifying
-    @Query("UPDATE AdvertisingCampaign c SET c.status = 'ACTIVE' " +
-            "WHERE c.client.id = :clientId AND c.status = 'FROZEN'")
-    void unfreezeAllClientCampaigns(@Param("clientId") Long clientId);
 }

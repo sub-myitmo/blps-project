@@ -49,22 +49,17 @@ public class AdvertisingCampaign {
     @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL)
     private List<Comment> comments = new ArrayList<>();
 
-    public enum CampaignStatus {
-        PENDING,        // На модерации
-        APPROVED,       // Одобрено, но не активно (ждет старта или нет денег)
-        ACTIVE,         // Активно (деньги списываются)
-        PAUSED_BY_CLIENT,    // Приостановлено клиентом
-        PAUSED_BY_MODERATOR, // Приостановлено модератором
-        FROZEN,         // Заморожено (нет денег)
-        REJECTED,       // Отклонено модератором
-        COMPLETED,       // Завершено (по дате окончания)
-        AT_SIGNING_BY_CLIENT,      // На подписании клиентом
-        AT_SIGNING_BY_MODERATOR      // На подписании модератором
-        // COMPLETED, PAUSED_BY_CLIENT, PAUSED_BY_MODERATOR, FROZEN - одно и то же по факту
-    }
-
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+    }
+
+    public void transitionTo(CampaignStatus newStatus) {
+        if (status.canTransitionTo(newStatus)) {
+            this.status = newStatus;
+        } else {
+            throw new RuntimeException("Действие недоступно");
+        }
+
     }
 }

@@ -3,6 +3,7 @@ package ru.aviasales.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.dal.model.Comment;
 import ru.aviasales.dal.repository.CommentRepository;
 import ru.aviasales.service.dto.CampaignResponse;
@@ -11,6 +12,9 @@ import ru.aviasales.dal.model.AdvertisingCampaign;
 import ru.aviasales.dal.model.Moderator;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.ModeratorRepository;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,13 +30,21 @@ public class ModeratorService {
         Moderator moderator = moderatorRepository.findByApiKey(apiKey)
                 .orElseThrow(() -> new RuntimeException("Moderator not found"));
 
-        AdvertisingCampaign campaign = campaignRepository.findById(campaignId)
-                .orElseThrow(() -> new RuntimeException("Campaign not found"));
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
 
-        if ((campaign.getStatus() == AdvertisingCampaign.CampaignStatus.ACTIVE
-                && request.getAction() == ModeratorActionRequest.Action.PAUSE)
-                || campaign.getStatus() != AdvertisingCampaign.CampaignStatus.PENDING) {
-            throw new RuntimeException("Campaign is not pending moderation");
+        switch (request.getAction()) {
+            case SIGN_DOC:
+                // TODO: логика подписания
+                campaign.transitionTo(CampaignStatus.AT_SIGNING);
+                break;
+            case REJECT:
+                campaign.transitionTo(CampaignStatus.REJECTED);
+                break;
+            case PAUSE:
+                campaign.transitionTo(CampaignStatus.PAUSED_BY_MODERATOR);
+                break;
+            default:
+                throw new RuntimeException("Invalid action for moderation");
         }
 
         Comment comment = new Comment();
@@ -41,36 +53,23 @@ public class ModeratorService {
         comment.setCampaign(campaign);
         commentRepository.save(comment);
 
-        switch (request.getAction()) {
-            case APPROVE:
-                campaign.setStatus(AdvertisingCampaign.CampaignStatus.APPROVED);
-                break;
-            case REJECT:
-                campaign.setStatus(AdvertisingCampaign.CampaignStatus.REJECTED);
-                break;
-            case PAUSE:
-                campaign.setStatus(AdvertisingCampaign.CampaignStatus.PAUSED_BY_MODERATOR);
-            default:
-                throw new RuntimeException("Invalid action for moderation");
-        }
-
         return CampaignResponse.fromEntity(campaignRepository.save(campaign));
     }
 
-    @Transactional
-    public CampaignResponse signatureCampaign(String apiKey, Long campaignId) {
-        Moderator moderator = moderatorRepository.findByApiKey(apiKey)
-                .orElseThrow(() -> new RuntimeException("Moderator not found"));
+    public CampaignResponse getCampaign(Long id) {
+        return CampaignResponse.fromEntity(getCampaignOrThrow(id));
+    }
 
-        AdvertisingCampaign campaign = campaignRepository.findById(campaignId)
+    public List<CampaignResponse> getCampaignsByStatus(CampaignStatus status) {
+        List<AdvertisingCampaign> campaigns = campaignRepository
+                .findByStatus(status);
+        return campaigns.stream()
+                .map(CampaignResponse::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
+        return campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new RuntimeException("Campaign not found"));
-
-        if (campaign.getStatus() == AdvertisingCampaign.CampaignStatus.APPROVED) {
-            campaign.setStatus(AdvertisingCampaign.CampaignStatus.AT_SIGNING_BY_MODERATOR);
-        } else {
-            throw new RuntimeException("Кампания должна быть в статусе APPROVED");
-        }
-
-        return CampaignResponse.fromEntity(campaignRepository.save(campaign));
     }
 }

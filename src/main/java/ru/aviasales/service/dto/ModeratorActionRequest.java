@@ -14,7 +14,7 @@ public class ModeratorActionRequest {
     private String comment;
 
     public enum Action {
-        APPROVE,
+        SIGN_DOC,
         REJECT,
         PAUSE
     }
