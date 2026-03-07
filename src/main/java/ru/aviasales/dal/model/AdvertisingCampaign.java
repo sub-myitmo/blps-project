@@ -49,6 +49,9 @@ public class AdvertisingCampaign {
     @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL)
     private List<Comment> comments = new ArrayList<>();
 
+    @OneToOne(mappedBy = "campaign", cascade = CascadeType.ALL)
+    private CampaignSignature signature;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

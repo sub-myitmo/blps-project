@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.aviasales.dal.model.CampaignStatus;
+import ru.aviasales.dal.model.CampaignSignature;
 import ru.aviasales.dal.model.Comment;
 import ru.aviasales.dal.repository.CommentRepository;
 import ru.aviasales.service.dto.CampaignResponse;
@@ -11,8 +12,10 @@ import ru.aviasales.service.dto.ModeratorActionRequest;
 import ru.aviasales.dal.model.AdvertisingCampaign;
 import ru.aviasales.dal.model.Moderator;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
+import ru.aviasales.dal.repository.CampaignSignatureRepository;
 import ru.aviasales.dal.repository.ModeratorRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -23,6 +26,7 @@ public class ModeratorService {
     private final ModeratorRepository moderatorRepository;
     private final AdvertisingCampaignRepository campaignRepository;
     private final CommentRepository commentRepository;
+    private final CampaignSignatureRepository campaignSignatureRepository;
 
     @Transactional
     public CampaignResponse actionCampaign(String apiKey, Long campaignId,
@@ -34,7 +38,25 @@ public class ModeratorService {
 
         switch (request.getAction()) {
             case SIGN_DOC:
-                // TODO: логика подписания
+                if (campaign.getStatus() != CampaignStatus.PENDING) {
+                    throw new RuntimeException("Campaign must be in PENDING status for moderator signing");
+                }
+
+                CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                        .orElseGet(() -> {
+                            CampaignSignature newSignature = new CampaignSignature();
+                            newSignature.setCampaign(campaign);
+                            return newSignature;
+                        });
+
+                signature.setDocumentHash(CampaignDocumentHashUtil.buildDocumentHash(campaign));
+                signature.setModeratorId(moderator.getId());
+                signature.setModeratorSignedAt(LocalDateTime.now());
+                signature.setClientId(null);
+                signature.setClientSignedAt(null);
+                signature.setFullySigned(false);
+
+                campaign.setSignature(campaignSignatureRepository.save(signature));
                 campaign.transitionTo(CampaignStatus.AT_SIGNING);
                 break;
             case REJECT:

@@ -3,6 +3,7 @@ package ru.aviasales.service.dto;
 import lombok.Data;
 import ru.aviasales.dal.model.AdvertisingCampaign;
 import ru.aviasales.dal.model.CampaignStatus;
+import ru.aviasales.dal.model.CampaignSignature;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -20,6 +21,10 @@ public class CampaignResponse {
     private CampaignStatus status;
     private LocalDateTime createdAt;
     private List<CommentResponse> moderationComments;
+    private String documentHash;
+    private LocalDateTime moderatorSignedAt;
+    private LocalDateTime clientSignedAt;
+    private boolean fullySigned;
 
     public static CampaignResponse fromEntity(AdvertisingCampaign campaign) {
         CampaignResponse response = new CampaignResponse();
@@ -33,6 +38,15 @@ public class CampaignResponse {
         response.setStatus(campaign.getStatus());
         response.setCreatedAt(campaign.getCreatedAt());
         response.setModerationComments(campaign.getComments().stream().map(CommentResponse::fromEntity).toList());
+
+        CampaignSignature signature = campaign.getSignature();
+        if (signature != null) {
+            response.setDocumentHash(signature.getDocumentHash());
+            response.setModeratorSignedAt(signature.getModeratorSignedAt());
+            response.setClientSignedAt(signature.getClientSignedAt());
+            response.setFullySigned(signature.isFullySigned());
+        }
+
         return response;
     }
 }

@@ -7,9 +7,9 @@ import ru.aviasales.dal.model.*;
 import ru.aviasales.service.dto.CampaignRequest;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
+import ru.aviasales.dal.repository.CampaignSignatureRepository;
 import ru.aviasales.dal.repository.ClientRepository;
 import ru.aviasales.service.dto.ClientActionRequest;
-import ru.aviasales.service.dto.ModeratorActionRequest;
 
 import java.time.LocalDateTime;
 
@@ -19,6 +19,7 @@ public class ClientService {
 
     private final ClientRepository clientRepository;
     private final AdvertisingCampaignRepository campaignRepository;
+    private final CampaignSignatureRepository campaignSignatureRepository;
 
     @Transactional
     public CampaignResponse createCampaign(String apiKey, CampaignRequest request) {
@@ -52,11 +53,31 @@ public class ClientService {
     public CampaignResponse actionCampaign(String apiKey, Long campaignId,
                                            ClientActionRequest request) {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
-        validateAccessOrThrow(apiKey, campaign);
+        Client client = validateAccessOrThrow(apiKey, campaign);
 
         switch (request.getAction()) {
             case SIGN_DOC:
-                // TODO: логика подписания
+                if (campaign.getStatus() != CampaignStatus.AT_SIGNING) {
+                    throw new RuntimeException("Campaign must be in AT_SIGNING status for client signing");
+                }
+
+                CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                        .orElseThrow(() -> new RuntimeException("Campaign is not signed by moderator"));
+
+                if (signature.getModeratorId() == null || signature.getModeratorSignedAt() == null) {
+                    throw new RuntimeException("Campaign is not signed by moderator");
+                }
+
+                String actualHash = CampaignDocumentHashUtil.buildDocumentHash(campaign);
+                if (!actualHash.equals(signature.getDocumentHash())) {
+                    throw new RuntimeException("Campaign document hash mismatch");
+                }
+
+                signature.setClientId(client.getId());
+                signature.setClientSignedAt(LocalDateTime.now());
+                signature.setFullySigned(true);
+
+                campaign.setSignature(campaignSignatureRepository.save(signature));
                 campaign.transitionTo(CampaignStatus.WAITING_START);
                 break;
             case RESUME:
@@ -80,13 +101,15 @@ public class ClientService {
                 .orElseThrow(() -> new RuntimeException("Campaign not found"));
     }
 
-    private void validateAccessOrThrow(String apiKey, AdvertisingCampaign campaign) {
+    private Client validateAccessOrThrow(String apiKey, AdvertisingCampaign campaign) {
         Client client = clientRepository.findByApiKey(apiKey)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
 
         if (!campaign.getClient().getId().equals(client.getId())) {
             throw new RuntimeException("Access denied");
         }
+
+        return client;
     }
 
     private void validateDates(LocalDateTime startDate, LocalDateTime endDate) {
