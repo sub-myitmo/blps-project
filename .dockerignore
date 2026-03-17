@@ -1,0 +1,7 @@
+target
+.git
+.idea
+.vscode
+README.md
+code_collecting_tool.py
+curl-requests
