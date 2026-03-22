@@ -9,9 +9,11 @@ import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.CampaignSignatureRepository;
 import ru.aviasales.dal.repository.ClientRepository;
+import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ClientActionRequest;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +22,7 @@ public class ClientService {
     private final ClientRepository clientRepository;
     private final AdvertisingCampaignRepository campaignRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
+    private final CampaignSignatureAuditService campaignSignatureAuditService;
 
     @Transactional
     public CampaignResponse createCampaign(String apiKey, CampaignRequest request) {
@@ -49,6 +52,17 @@ public class ClientService {
         return CampaignResponse.fromEntity(campaign);
     }
 
+    @Transactional(readOnly = true)
+    public CampaignSignatureDetailsResponse getCampaignSignature(String apiKey, Long campaignId) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        validateAccessOrThrow(apiKey, campaign);
+
+        CampaignSignature signature = campaignSignatureRepository.findDetailedByCampaign(campaign)
+                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+
+        return CampaignSignatureDetailsResponse.fromEntity(signature);
+    }
+
     @Transactional
     public CampaignResponse actionCampaign(String apiKey, Long campaignId,
                                            ClientActionRequest request) {
@@ -60,6 +74,7 @@ public class ClientService {
                 if (campaign.getStatus() != CampaignStatus.AT_SIGNING) {
                     throw new RuntimeException("Campaign must be in AT_SIGNING status for client signing");
                 }
+                validateConsentAccepted(request.getConsentAccepted());
 
                 CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
                         .orElseThrow(() -> new RuntimeException("Campaign is not signed by moderator"));
@@ -68,19 +83,40 @@ public class ClientService {
                     throw new RuntimeException("Campaign is not signed by moderator");
                 }
 
+                requireDocumentHash(signature, request.getDocumentHash());
+
                 String actualHash = CampaignDocumentHashUtil.buildDocumentHash(campaign);
                 if (!actualHash.equals(signature.getDocumentHash())) {
                     throw new RuntimeException("Campaign document hash mismatch");
                 }
 
                 signature.setClientId(client.getId());
-                signature.setClientSignedAt(LocalDateTime.now());
+                CampaignSignatureAuditService.SignatureCapture clientCapture =
+                        campaignSignatureAuditService.captureSignature(
+                                signature,
+                                CampaignSignatureEventType.CLIENT_SIGNED,
+                                SignatureActorType.CLIENT,
+                                client.getId(),
+                                client.getName(),
+                                CampaignSignaturePolicy.CLIENT_CONSENT_STATEMENT
+                        );
+                signature.setClientSignedAt(clientCapture.occurredAtLegacyUtc());
+                signature.setClientSignedAtUtc(clientCapture.occurredAtUtc());
+                signature.setClientEvidence(clientCapture.evidenceJson());
                 signature.setFullySigned(true);
+                signature.setFullySignedAtUtc(clientCapture.occurredAtUtc());
 
                 campaign.setSignature(campaignSignatureRepository.save(signature));
+                campaignSignatureAuditService.recordSignatureCompleted(
+                        signature,
+                        SignatureActorType.CLIENT,
+                        client.getId(),
+                        client.getName()
+                );
                 campaign.transitionTo(CampaignStatus.WAITING_START);
                 break;
             case RESUME:
+                rejectSignedTermChanges(campaign, request);
                 validateDates(request.getStartDate(), request.getEndDate());
                 campaign.transitionTo(CampaignStatus.WAITING_START);
                 campaign.setStartDate(request.getStartDate());
@@ -123,6 +159,31 @@ public class ClientService {
             if (startDate.isAfter(endDate)) {
                 throw new RuntimeException("Start date must be before end date");
             }
+        }
+    }
+
+    private void validateConsentAccepted(Boolean consentAccepted) {
+        if (Boolean.FALSE.equals(consentAccepted)) {
+            throw new RuntimeException("Explicit electronic-signature consent is required");
+        }
+    }
+
+    private void requireDocumentHash(CampaignSignature signature, String documentHash) {
+        if (documentHash != null && !documentHash.isBlank() && !signature.getDocumentHash().equals(documentHash)) {
+            throw new RuntimeException("Document hash confirmation mismatch");
+        }
+    }
+
+    private void rejectSignedTermChanges(AdvertisingCampaign campaign, ClientActionRequest request) {
+        CampaignSignature signature = campaign.getSignature();
+        if (signature == null || !signature.isFullySigned()) {
+            return;
+        }
+
+        boolean startDateChanged = !Objects.equals(campaign.getStartDate(), request.getStartDate());
+        boolean endDateChanged = !Objects.equals(campaign.getEndDate(), request.getEndDate());
+        if (startDateChanged || endDateChanged) {
+            throw new RuntimeException("Signed campaign terms cannot be changed without a new signing cycle");
         }
     }
 }

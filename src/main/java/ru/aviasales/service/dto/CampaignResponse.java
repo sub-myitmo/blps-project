@@ -4,8 +4,10 @@ import lombok.Data;
 import ru.aviasales.dal.model.AdvertisingCampaign;
 import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.dal.model.CampaignSignature;
+import ru.aviasales.dal.model.SignatureType;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -22,8 +24,13 @@ public class CampaignResponse {
     private LocalDateTime createdAt;
     private List<CommentResponse> moderationComments;
     private String documentHash;
+    private String hashAlgorithm;
+    private String documentTemplateVersion;
+    private SignatureType signatureType;
     private LocalDateTime moderatorSignedAt;
+    private Instant moderatorSignedAtUtc;
     private LocalDateTime clientSignedAt;
+    private Instant clientSignedAtUtc;
     private boolean fullySigned;
 
     public static CampaignResponse fromEntity(AdvertisingCampaign campaign) {
@@ -42,8 +49,13 @@ public class CampaignResponse {
         CampaignSignature signature = campaign.getSignature();
         if (signature != null) {
             response.setDocumentHash(signature.getDocumentHash());
+            response.setHashAlgorithm(signature.getHashAlgorithm());
+            response.setDocumentTemplateVersion(signature.getDocumentTemplateVersion());
+            response.setSignatureType(signature.getSignatureType());
             response.setModeratorSignedAt(signature.getModeratorSignedAt());
+            response.setModeratorSignedAtUtc(signature.getModeratorSignedAtUtc());
             response.setClientSignedAt(signature.getClientSignedAt());
+            response.setClientSignedAtUtc(signature.getClientSignedAtUtc());
             response.setFullySigned(signature.isFullySigned());
         }
 

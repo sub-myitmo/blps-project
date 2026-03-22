@@ -3,19 +3,15 @@ package ru.aviasales.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.aviasales.dal.model.CampaignStatus;
-import ru.aviasales.dal.model.CampaignSignature;
-import ru.aviasales.dal.model.Comment;
-import ru.aviasales.dal.repository.CommentRepository;
-import ru.aviasales.service.dto.CampaignResponse;
-import ru.aviasales.service.dto.ModeratorActionRequest;
-import ru.aviasales.dal.model.AdvertisingCampaign;
-import ru.aviasales.dal.model.Moderator;
+import ru.aviasales.dal.model.*;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.CampaignSignatureRepository;
+import ru.aviasales.dal.repository.CommentRepository;
 import ru.aviasales.dal.repository.ModeratorRepository;
+import ru.aviasales.service.dto.CampaignResponse;
+import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
+import ru.aviasales.service.dto.ModeratorActionRequest;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -27,6 +23,7 @@ public class ModeratorService {
     private final AdvertisingCampaignRepository campaignRepository;
     private final CommentRepository commentRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
+    private final CampaignSignatureAuditService campaignSignatureAuditService;
 
     @Transactional
     public CampaignResponse actionCampaign(String apiKey, Long campaignId,
@@ -41,6 +38,7 @@ public class ModeratorService {
                 if (campaign.getStatus() != CampaignStatus.PENDING) {
                     throw new RuntimeException("Campaign must be in PENDING status for moderator signing");
                 }
+                validateConsentAccepted(request.getConsentAccepted());
 
                 CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
                         .orElseGet(() -> {
@@ -49,14 +47,45 @@ public class ModeratorService {
                             return newSignature;
                         });
 
-                signature.setDocumentHash(CampaignDocumentHashUtil.buildDocumentHash(campaign));
+                String documentSnapshot = CampaignSigningDocumentFactory.buildSnapshot(campaign);
+                signature.setDocumentHash(CampaignDocumentHashUtil.buildDocumentHash(documentSnapshot));
+                signature.setHashAlgorithm(CampaignDocumentHashUtil.HASH_ALGORITHM);
+                signature.setSignatureType(SignatureType.SIMPLE_ELECTRONIC_SIGNATURE);
+                signature.setDocumentTemplateVersion(CampaignSigningDocumentFactory.TEMPLATE_VERSION);
+                signature.setDocumentSnapshot(documentSnapshot);
+                signature.getAuditEvents().clear();
                 signature.setModeratorId(moderator.getId());
-                signature.setModeratorSignedAt(LocalDateTime.now());
+                signature.setModeratorSignedAt(null);
+                signature.setModeratorSignedAtUtc(null);
+                signature.setModeratorEvidence(null);
                 signature.setClientId(null);
                 signature.setClientSignedAt(null);
+                signature.setClientSignedAtUtc(null);
+                signature.setClientEvidence(null);
                 signature.setFullySigned(false);
+                signature.setFullySignedAtUtc(null);
 
-                campaign.setSignature(campaignSignatureRepository.save(signature));
+                signature = campaignSignatureRepository.save(signature);
+                CampaignSignatureAuditService.SignatureCapture moderatorCapture =
+                        campaignSignatureAuditService.captureSignature(
+                                signature,
+                                CampaignSignatureEventType.MODERATOR_SIGNED,
+                                SignatureActorType.MODERATOR,
+                                moderator.getId(),
+                                moderator.getName(),
+                                CampaignSignaturePolicy.MODERATOR_CONSENT_STATEMENT
+                        );
+                signature.setModeratorSignedAt(moderatorCapture.occurredAtLegacyUtc());
+                signature.setModeratorSignedAtUtc(moderatorCapture.occurredAtUtc());
+                signature.setModeratorEvidence(moderatorCapture.evidenceJson());
+                signature = campaignSignatureRepository.save(signature);
+                campaign.setSignature(signature);
+                campaignSignatureAuditService.recordDocumentFrozen(
+                        signature,
+                        SignatureActorType.MODERATOR,
+                        moderator.getId(),
+                        moderator.getName()
+                );
                 campaign.transitionTo(CampaignStatus.AT_SIGNING);
                 break;
             case REJECT:
@@ -82,6 +111,14 @@ public class ModeratorService {
         return CampaignResponse.fromEntity(getCampaignOrThrow(id));
     }
 
+    @Transactional(readOnly = true)
+    public CampaignSignatureDetailsResponse getCampaignSignature(Long id) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(id);
+        CampaignSignature signature = campaignSignatureRepository.findDetailedByCampaign(campaign)
+                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+        return CampaignSignatureDetailsResponse.fromEntity(signature);
+    }
+
     public List<CampaignResponse> getCampaignsByStatus(CampaignStatus status) {
         List<AdvertisingCampaign> campaigns = campaignRepository
                 .findByStatus(status);
@@ -93,5 +130,11 @@ public class ModeratorService {
     private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
         return campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new RuntimeException("Campaign not found"));
+    }
+
+    private void validateConsentAccepted(Boolean consentAccepted) {
+        if (Boolean.FALSE.equals(consentAccepted)) {
+            throw new RuntimeException("Explicit electronic-signature consent is required");
+        }
     }
 }

@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.service.dto.CampaignResponse;
+import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ModeratorActionRequest;
 import ru.aviasales.service.ModeratorService;
 
@@ -18,7 +19,7 @@ public class ModeratorController {
 
     private final ModeratorService moderatorService;
 
-    @GetMapping("/{status}")
+    @GetMapping("/status/{status}")
     public ResponseEntity<List<CampaignResponse>> getCampaignsByStatus(@PathVariable CampaignStatus status) {
         return ResponseEntity.ok(moderatorService.getCampaignsByStatus(status));
     }
@@ -35,5 +36,10 @@ public class ModeratorController {
             @Valid @RequestBody ModeratorActionRequest request) {
         CampaignResponse response = moderatorService.actionCampaign(apiKey, id, request);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/signature")
+    public ResponseEntity<CampaignSignatureDetailsResponse> getCampaignSignature(@PathVariable Long id) {
+        return ResponseEntity.ok(moderatorService.getCampaignSignature(id));
     }
 }

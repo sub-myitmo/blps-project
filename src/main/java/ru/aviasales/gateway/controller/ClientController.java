@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.aviasales.service.dto.CampaignRequest;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.ClientService;
+import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ClientActionRequest;
 
 @RestController
@@ -40,5 +41,12 @@ public class ClientController {
             @PathVariable Long id) {
         CampaignResponse response = clientService.getCampaign(apiKey, id);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/signature")
+    public ResponseEntity<CampaignSignatureDetailsResponse> getCampaignSignature(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(clientService.getCampaignSignature(apiKey, id));
     }
 }

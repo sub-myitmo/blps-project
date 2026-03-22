@@ -24,6 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,6 +42,9 @@ class ClientServiceTest {
     @Mock
     private CampaignSignatureRepository campaignSignatureRepository;
 
+    @Mock
+    private CampaignSignatureAuditService campaignSignatureAuditService;
+
     @InjectMocks
     private ClientService clientService;
 
@@ -51,6 +56,7 @@ class ClientServiceTest {
         Client client = new Client();
         client.setId(5L);
         client.setApiKey(apiKey);
+        client.setName("Client");
 
         AdvertisingCampaign campaign = buildCampaign(client);
         campaign.setStatus(CampaignStatus.AT_SIGNING);
@@ -58,6 +64,7 @@ class ClientServiceTest {
         CampaignSignature signature = new CampaignSignature();
         signature.setCampaign(campaign);
         signature.setDocumentHash(CampaignDocumentHashUtil.buildDocumentHash(campaign));
+        signature.setDocumentSnapshot(CampaignSigningDocumentFactory.buildSnapshot(campaign));
         signature.setModeratorId(17L);
         signature.setModeratorSignedAt(LocalDateTime.now().minusHours(1));
         signature.setFullySigned(false);
@@ -71,6 +78,24 @@ class ClientServiceTest {
         when(campaignSignatureRepository.save(any(CampaignSignature.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(campaignRepository.save(campaign)).thenReturn(campaign);
+        when(campaignSignatureAuditService.captureSignature(
+                any(CampaignSignature.class),
+                eq(ru.aviasales.dal.model.CampaignSignatureEventType.CLIENT_SIGNED),
+                eq(ru.aviasales.dal.model.SignatureActorType.CLIENT),
+                eq(client.getId()),
+                any(String.class),
+                any(String.class)
+        )).thenReturn(new CampaignSignatureAuditService.SignatureCapture(
+                java.time.Instant.parse("2026-03-15T10:00:00Z"),
+                LocalDateTime.of(2026, 3, 15, 10, 0),
+                "{\"eventType\":\"CLIENT_SIGNED\"}"
+        ));
+        doNothing().when(campaignSignatureAuditService).recordSignatureCompleted(
+                any(CampaignSignature.class),
+                eq(ru.aviasales.dal.model.SignatureActorType.CLIENT),
+                eq(client.getId()),
+                any(String.class)
+        );
 
         CampaignResponse response = clientService.actionCampaign(apiKey, campaignId, request);
 
@@ -91,6 +116,7 @@ class ClientServiceTest {
         Client client = new Client();
         client.setId(5L);
         client.setApiKey(apiKey);
+        client.setName("Client");
 
         AdvertisingCampaign campaign = buildCampaign(client);
         campaign.setStatus(CampaignStatus.AT_SIGNING);
@@ -117,6 +143,7 @@ class ClientServiceTest {
         Client client = new Client();
         client.setId(5L);
         client.setApiKey(apiKey);
+        client.setName("Client");
 
         AdvertisingCampaign campaign = buildCampaign(client);
         campaign.setStatus(CampaignStatus.PENDING);

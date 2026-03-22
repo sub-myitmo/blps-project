@@ -13,6 +13,8 @@ public class ModeratorActionRequest {
     @Size(max = 500, message = "Комментарий не может превышать 500 символов")
     private String comment;
 
+    private Boolean consentAccepted;
+
     public enum Action {
         SIGN_DOC,
         REJECT,

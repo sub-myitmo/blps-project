@@ -13,6 +13,8 @@ public class ClientActionRequest {
 
     private LocalDateTime startDate;
     private LocalDateTime endDate;
+    private Boolean consentAccepted;
+    private String documentHash;
 
     public enum ClientAction {
         SIGN_DOC,

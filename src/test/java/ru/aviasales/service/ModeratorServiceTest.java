@@ -27,6 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,6 +48,9 @@ class ModeratorServiceTest {
     @Mock
     private CampaignSignatureRepository campaignSignatureRepository;
 
+    @Mock
+    private CampaignSignatureAuditService campaignSignatureAuditService;
+
     @InjectMocks
     private ModeratorService moderatorService;
 
@@ -55,9 +61,11 @@ class ModeratorServiceTest {
 
         Moderator moderator = new Moderator();
         moderator.setId(7L);
+        moderator.setName("Moderator");
 
         Client client = new Client();
         client.setId(4L);
+        client.setName("Client");
 
         AdvertisingCampaign campaign = new AdvertisingCampaign();
         campaign.setId(campaignId);
@@ -82,11 +90,29 @@ class ModeratorServiceTest {
         when(commentRepository.save(any(Comment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(campaignRepository.save(campaign)).thenReturn(campaign);
+        when(campaignSignatureAuditService.captureSignature(
+                any(CampaignSignature.class),
+                eq(ru.aviasales.dal.model.CampaignSignatureEventType.MODERATOR_SIGNED),
+                eq(ru.aviasales.dal.model.SignatureActorType.MODERATOR),
+                eq(moderator.getId()),
+                any(String.class),
+                any(String.class)
+        )).thenReturn(new CampaignSignatureAuditService.SignatureCapture(
+                java.time.Instant.parse("2026-03-15T10:00:00Z"),
+                LocalDateTime.of(2026, 3, 15, 10, 0),
+                "{\"eventType\":\"MODERATOR_SIGNED\"}"
+        ));
+        doNothing().when(campaignSignatureAuditService).recordDocumentFrozen(
+                any(CampaignSignature.class),
+                eq(ru.aviasales.dal.model.SignatureActorType.MODERATOR),
+                eq(moderator.getId()),
+                any(String.class)
+        );
 
         CampaignResponse response = moderatorService.actionCampaign(apiKey, campaignId, request);
 
         ArgumentCaptor<CampaignSignature> signatureCaptor = ArgumentCaptor.forClass(CampaignSignature.class);
-        verify(campaignSignatureRepository).save(signatureCaptor.capture());
+        verify(campaignSignatureRepository, atLeastOnce()).save(signatureCaptor.capture());
         CampaignSignature savedSignature = signatureCaptor.getValue();
 
         assertEquals(CampaignStatus.AT_SIGNING, campaign.getStatus());
