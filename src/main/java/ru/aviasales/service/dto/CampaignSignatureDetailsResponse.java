@@ -5,7 +5,6 @@ import ru.aviasales.dal.model.CampaignSignature;
 import ru.aviasales.dal.model.CampaignSignatureAuditEvent;
 import ru.aviasales.dal.model.CampaignSignatureEventType;
 import ru.aviasales.dal.model.SignatureActorType;
-import ru.aviasales.dal.model.SignatureType;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -16,7 +15,6 @@ public class CampaignSignatureDetailsResponse {
     private Long campaignId;
     private String documentHash;
     private String hashAlgorithm;
-    private SignatureType signatureType;
     private String documentTemplateVersion;
     private String documentSnapshot;
     private Long moderatorId;
@@ -29,6 +27,13 @@ public class CampaignSignatureDetailsResponse {
     private String clientEvidence;
     private boolean fullySigned;
     private Instant fullySignedAtUtc;
+    private String edoOperator;
+    private String edoMessageId;
+    private String edoEntityId;
+    private String edoDocumentStatus;
+    private String edoModeratorCertThumbprint;
+    private String edoClientCertThumbprint;
+    private Instant edoLastSyncedAtUtc;
     private List<AuditEventResponse> auditEvents;
 
     public static CampaignSignatureDetailsResponse fromEntity(CampaignSignature signature) {
@@ -36,7 +41,6 @@ public class CampaignSignatureDetailsResponse {
         response.setCampaignId(signature.getCampaign() != null ? signature.getCampaign().getId() : null);
         response.setDocumentHash(signature.getDocumentHash());
         response.setHashAlgorithm(signature.getHashAlgorithm());
-        response.setSignatureType(signature.getSignatureType());
         response.setDocumentTemplateVersion(signature.getDocumentTemplateVersion());
         response.setDocumentSnapshot(signature.getDocumentSnapshot());
         response.setModeratorId(signature.getModeratorId());
@@ -49,6 +53,13 @@ public class CampaignSignatureDetailsResponse {
         response.setClientEvidence(signature.getClientEvidence());
         response.setFullySigned(signature.isFullySigned());
         response.setFullySignedAtUtc(signature.getFullySignedAtUtc());
+        response.setEdoOperator(signature.getEdoOperator());
+        response.setEdoMessageId(signature.getEdoMessageId());
+        response.setEdoEntityId(signature.getEdoEntityId());
+        response.setEdoDocumentStatus(signature.getEdoDocumentStatus());
+        response.setEdoModeratorCertThumbprint(signature.getEdoModeratorCertThumbprint());
+        response.setEdoClientCertThumbprint(signature.getEdoClientCertThumbprint());
+        response.setEdoLastSyncedAtUtc(signature.getEdoLastSyncedAtUtc());
         response.setAuditEvents(signature.getAuditEvents().stream().map(AuditEventResponse::fromEntity).toList());
         return response;
     }

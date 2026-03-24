@@ -1,6 +1,7 @@
 package ru.aviasales.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.aviasales.dal.model.*;
@@ -11,12 +12,15 @@ import ru.aviasales.dal.repository.ModeratorRepository;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ModeratorActionRequest;
+import ru.aviasales.service.edo.EdoDocumentPayload;
+import ru.aviasales.service.edo.EdoOperatorClient;
+import ru.aviasales.service.edo.EdoSendResult;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class ModeratorService {
 
     private final ModeratorRepository moderatorRepository;
@@ -24,6 +28,29 @@ public class ModeratorService {
     private final CommentRepository commentRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
     private final CampaignSignatureAuditService campaignSignatureAuditService;
+    private final EdoOperatorClient edoOperatorClient;
+    private final String edoModeratorBoxId;
+    private final String edoClientBoxId;
+
+    public ModeratorService(
+            ModeratorRepository moderatorRepository,
+            AdvertisingCampaignRepository campaignRepository,
+            CommentRepository commentRepository,
+            CampaignSignatureRepository campaignSignatureRepository,
+            CampaignSignatureAuditService campaignSignatureAuditService,
+            EdoOperatorClient edoOperatorClient,
+            @Value("${edo.moderator-box-id:stub-moderator-box}") String edoModeratorBoxId,
+            @Value("${edo.client-box-id:stub-client-box}") String edoClientBoxId
+    ) {
+        this.moderatorRepository = moderatorRepository;
+        this.campaignRepository = campaignRepository;
+        this.commentRepository = commentRepository;
+        this.campaignSignatureRepository = campaignSignatureRepository;
+        this.campaignSignatureAuditService = campaignSignatureAuditService;
+        this.edoOperatorClient = edoOperatorClient;
+        this.edoModeratorBoxId = edoModeratorBoxId;
+        this.edoClientBoxId = edoClientBoxId;
+    }
 
     @Transactional
     public CampaignResponse actionCampaign(String apiKey, Long campaignId,
@@ -47,12 +74,16 @@ public class ModeratorService {
                             return newSignature;
                         });
 
+                // Build and freeze document
                 String documentSnapshot = CampaignSigningDocumentFactory.buildSnapshot(campaign);
-                signature.setDocumentHash(CampaignDocumentHashUtil.buildDocumentHash(documentSnapshot));
+                String documentHash = CampaignDocumentHashUtil.buildDocumentHash(documentSnapshot);
+                signature.setDocumentHash(documentHash);
                 signature.setHashAlgorithm(CampaignDocumentHashUtil.HASH_ALGORITHM);
-                signature.setSignatureType(SignatureType.SIMPLE_ELECTRONIC_SIGNATURE);
+                signature.setSignatureType(null); // no longer self-assigned
                 signature.setDocumentTemplateVersion(CampaignSigningDocumentFactory.TEMPLATE_VERSION);
                 signature.setDocumentSnapshot(documentSnapshot);
+
+                // Reset signing state for fresh cycle
                 signature.getAuditEvents().clear();
                 signature.setModeratorId(moderator.getId());
                 signature.setModeratorSignedAt(null);
@@ -65,7 +96,52 @@ public class ModeratorService {
                 signature.setFullySigned(false);
                 signature.setFullySignedAtUtc(null);
 
+                // Reset operator fields
+                signature.setEdoOperator(null);
+                signature.setEdoMessageId(null);
+                signature.setEdoEntityId(null);
+                signature.setEdoDocumentStatus(null);
+                signature.setEdoModeratorBoxId(null);
+                signature.setEdoClientBoxId(null);
+                signature.setEdoModeratorCertThumbprint(null);
+                signature.setEdoClientCertThumbprint(null);
+                signature.setEdoLastSyncedAtUtc(null);
+                signature.setEdoRawResponse(null);
+
                 signature = campaignSignatureRepository.save(signature);
+
+                // Send document to ЭДО operator for moderator-side signing
+                EdoSendResult edoResult = edoOperatorClient.sendDocumentForSigning(
+                        new EdoDocumentPayload(
+                                documentSnapshot,
+                                documentHash,
+                                edoModeratorBoxId,
+                                edoClientBoxId,
+                                "Campaign #" + campaign.getId() + " advertising agreement"
+                        )
+                );
+
+                // Store operator identifiers
+                signature.setEdoOperator(edoResult.operator());
+                signature.setEdoMessageId(edoResult.messageId());
+                signature.setEdoEntityId(edoResult.entityId());
+                signature.setEdoDocumentStatus(edoResult.status());
+                signature.setEdoModeratorBoxId(edoModeratorBoxId);
+                signature.setEdoClientBoxId(edoClientBoxId);
+                signature.setEdoModeratorCertThumbprint(edoResult.senderCertThumbprint());
+                signature.setEdoLastSyncedAtUtc(Instant.now());
+                signature.setEdoRawResponse(edoResult.rawResponse());
+
+                // Audit: moderator signed via operator
+                CampaignSignatureAuditService.EdoEvidenceData edoEvidence =
+                        new CampaignSignatureAuditService.EdoEvidenceData(
+                                edoResult.operator(),
+                                edoResult.messageId(),
+                                edoResult.entityId(),
+                                edoResult.status(),
+                                edoResult.senderCertThumbprint()
+                        );
+
                 CampaignSignatureAuditService.SignatureCapture moderatorCapture =
                         campaignSignatureAuditService.captureSignature(
                                 signature,
@@ -73,19 +149,31 @@ public class ModeratorService {
                                 SignatureActorType.MODERATOR,
                                 moderator.getId(),
                                 moderator.getName(),
-                                CampaignSignaturePolicy.MODERATOR_CONSENT_STATEMENT
+                                CampaignSignaturePolicy.MODERATOR_CONSENT_STATEMENT,
+                                edoEvidence
                         );
                 signature.setModeratorSignedAt(moderatorCapture.occurredAtLegacyUtc());
                 signature.setModeratorSignedAtUtc(moderatorCapture.occurredAtUtc());
                 signature.setModeratorEvidence(moderatorCapture.evidenceJson());
+
                 signature = campaignSignatureRepository.save(signature);
                 campaign.setSignature(signature);
+
+                // Audit: document frozen + operator document sent
                 campaignSignatureAuditService.recordDocumentFrozen(
                         signature,
                         SignatureActorType.MODERATOR,
                         moderator.getId(),
                         moderator.getName()
                 );
+                campaignSignatureAuditService.recordEdoDocumentSent(
+                        signature,
+                        SignatureActorType.MODERATOR,
+                        moderator.getId(),
+                        moderator.getName(),
+                        edoEvidence
+                );
+
                 campaign.transitionTo(CampaignStatus.AT_SIGNING);
                 break;
             case REJECT:

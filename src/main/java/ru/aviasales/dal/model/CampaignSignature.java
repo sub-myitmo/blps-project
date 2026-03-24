@@ -31,7 +31,7 @@ public class CampaignSignature {
     @Column(name = "hash_algorithm", nullable = false, length = 32)
     private String hashAlgorithm;
 
-    @Column(name = "signature_type", nullable = false, length = 64)
+    @Column(name = "signature_type", length = 64)
     @Enumerated(EnumType.STRING)
     private SignatureType signatureType;
 
@@ -73,6 +73,37 @@ public class CampaignSignature {
 
     @Column(name = "fully_signed_at_utc")
     private Instant fullySignedAtUtc;
+
+    @Column(name = "edo_operator", length = 64)
+    private String edoOperator;
+
+    @Column(name = "edo_message_id", length = 128)
+    private String edoMessageId;
+
+    @Column(name = "edo_entity_id", length = 128)
+    private String edoEntityId;
+
+    @Column(name = "edo_document_status", length = 64)
+    private String edoDocumentStatus;
+
+    @Column(name = "edo_moderator_box_id", length = 128)
+    private String edoModeratorBoxId;
+
+    @Column(name = "edo_client_box_id", length = 128)
+    private String edoClientBoxId;
+
+    @Column(name = "edo_moderator_cert_thumbprint", length = 128)
+    private String edoModeratorCertThumbprint;
+
+    @Column(name = "edo_client_cert_thumbprint", length = 128)
+    private String edoClientCertThumbprint;
+
+    @Column(name = "edo_last_synced_at_utc")
+    private Instant edoLastSyncedAtUtc;
+
+    @Lob
+    @Column(name = "edo_raw_response", columnDefinition = "TEXT")
+    private String edoRawResponse;
 
     @OneToMany(mappedBy = "signature", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("occurredAtUtc ASC")

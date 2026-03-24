@@ -1,6 +1,6 @@
 package ru.aviasales.service;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.aviasales.dal.model.*;
@@ -11,18 +11,38 @@ import ru.aviasales.dal.repository.CampaignSignatureRepository;
 import ru.aviasales.dal.repository.ClientRepository;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ClientActionRequest;
+import ru.aviasales.service.edo.EdoCounterSignResult;
+import ru.aviasales.service.edo.EdoOperatorClient;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
 @Service
-@RequiredArgsConstructor
 public class ClientService {
 
     private final ClientRepository clientRepository;
     private final AdvertisingCampaignRepository campaignRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
     private final CampaignSignatureAuditService campaignSignatureAuditService;
+    private final EdoOperatorClient edoOperatorClient;
+    private final String edoClientBoxId;
+
+    public ClientService(
+            ClientRepository clientRepository,
+            AdvertisingCampaignRepository campaignRepository,
+            CampaignSignatureRepository campaignSignatureRepository,
+            CampaignSignatureAuditService campaignSignatureAuditService,
+            EdoOperatorClient edoOperatorClient,
+            @Value("${edo.client-box-id:stub-client-box}") String edoClientBoxId
+    ) {
+        this.clientRepository = clientRepository;
+        this.campaignRepository = campaignRepository;
+        this.campaignSignatureRepository = campaignSignatureRepository;
+        this.campaignSignatureAuditService = campaignSignatureAuditService;
+        this.edoOperatorClient = edoOperatorClient;
+        this.edoClientBoxId = edoClientBoxId;
+    }
 
     @Transactional
     public CampaignResponse createCampaign(String apiKey, CampaignRequest request) {
@@ -85,10 +105,40 @@ public class ClientService {
 
                 requireDocumentHash(signature, request.getDocumentHash());
 
+                // Verify document integrity — catch illegal mutations after freeze
                 String actualHash = CampaignDocumentHashUtil.buildDocumentHash(campaign);
                 if (!actualHash.equals(signature.getDocumentHash())) {
                     throw new RuntimeException("Campaign document hash mismatch");
                 }
+
+                // Verify operator document exists
+                if (signature.getEdoMessageId() == null || signature.getEdoEntityId() == null) {
+                    throw new RuntimeException("No ЭДО operator document found for this signature");
+                }
+
+                // Initiate countersign via ЭДО operator
+                EdoCounterSignResult counterSignResult = edoOperatorClient.initiateCounterSign(
+                        signature.getEdoMessageId(),
+                        signature.getEdoEntityId(),
+                        edoClientBoxId
+                );
+
+                // Update operator fields
+                signature.setEdoDocumentStatus(counterSignResult.status());
+                signature.setEdoClientBoxId(edoClientBoxId);
+                signature.setEdoClientCertThumbprint(counterSignResult.recipientCertThumbprint());
+                signature.setEdoLastSyncedAtUtc(Instant.now());
+                signature.setEdoRawResponse(counterSignResult.rawResponse());
+
+                // Audit: client signed via operator
+                CampaignSignatureAuditService.EdoEvidenceData edoEvidence =
+                        new CampaignSignatureAuditService.EdoEvidenceData(
+                                signature.getEdoOperator(),
+                                signature.getEdoMessageId(),
+                                signature.getEdoEntityId(),
+                                counterSignResult.status(),
+                                counterSignResult.recipientCertThumbprint()
+                        );
 
                 signature.setClientId(client.getId());
                 CampaignSignatureAuditService.SignatureCapture clientCapture =
@@ -98,7 +148,8 @@ public class ClientService {
                                 SignatureActorType.CLIENT,
                                 client.getId(),
                                 client.getName(),
-                                CampaignSignaturePolicy.CLIENT_CONSENT_STATEMENT
+                                CampaignSignaturePolicy.CLIENT_CONSENT_STATEMENT,
+                                edoEvidence
                         );
                 signature.setClientSignedAt(clientCapture.occurredAtLegacyUtc());
                 signature.setClientSignedAtUtc(clientCapture.occurredAtUtc());
