@@ -8,6 +8,9 @@ import ru.aviasales.dal.model.CampaignSignature;
 import ru.aviasales.dal.model.CampaignSignatureAuditEvent;
 import ru.aviasales.dal.model.CampaignSignatureEventType;
 import ru.aviasales.dal.model.SignatureActorType;
+import ru.aviasales.service.external.ExternalSignatureRequest;
+import ru.aviasales.service.external.ExternalSignatureResult;
+import ru.aviasales.service.external.ExternalSignatureService;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -19,6 +22,7 @@ import java.util.Map;
 public class CampaignSignatureAuditService {
 
     private final ObjectMapper objectMapper;
+    private final ExternalSignatureService externalSignatureService;
 
     public SignatureCapture captureSignature(
             CampaignSignature signature,
@@ -30,7 +34,19 @@ public class CampaignSignatureAuditService {
     ) {
         Instant nowUtc = Instant.now();
         LocalDateTime legacyUtc = LocalDateTime.ofInstant(nowUtc, java.time.ZoneOffset.UTC);
-        String evidence = buildEvidence(eventType, actorType, actorId, actorName, consentStatement, nowUtc);
+
+        ExternalSignatureRequest extRequest = new ExternalSignatureRequest(
+                signature.getDocumentHash(),
+                signature.getHashAlgorithm(),
+                eventType.name(),
+                actorId,
+                actorName,
+                consentStatement,
+                nowUtc.toString()
+        );
+        ExternalSignatureResult extResult = externalSignatureService.sign(extRequest);
+
+        String evidence = buildEvidence(eventType, actorType, actorId, actorName, consentStatement, nowUtc, extResult);
 
         CampaignSignatureAuditEvent event = buildEvent(signature, eventType, actorType, actorId, actorName, evidence, nowUtc, legacyUtc);
         signature.getAuditEvents().add(event);
@@ -41,7 +57,7 @@ public class CampaignSignatureAuditService {
     public void recordDocumentFrozen(CampaignSignature signature, SignatureActorType actorType, Long actorId, String actorName) {
         Instant nowUtc = Instant.now();
         LocalDateTime legacyUtc = LocalDateTime.ofInstant(nowUtc, java.time.ZoneOffset.UTC);
-        String evidence = buildEvidence(CampaignSignatureEventType.DOCUMENT_FROZEN, actorType, actorId, actorName, null, nowUtc);
+        String evidence = buildEvidence(CampaignSignatureEventType.DOCUMENT_FROZEN, actorType, actorId, actorName, null, nowUtc, null);
 
         CampaignSignatureAuditEvent event = buildEvent(
                 signature,
@@ -59,7 +75,7 @@ public class CampaignSignatureAuditService {
     public void recordSignatureCompleted(CampaignSignature signature, SignatureActorType actorType, Long actorId, String actorName) {
         Instant nowUtc = Instant.now();
         LocalDateTime legacyUtc = LocalDateTime.ofInstant(nowUtc, java.time.ZoneOffset.UTC);
-        String evidence = buildEvidence(CampaignSignatureEventType.SIGNATURE_COMPLETED, actorType, actorId, actorName, null, nowUtc);
+        String evidence = buildEvidence(CampaignSignatureEventType.SIGNATURE_COMPLETED, actorType, actorId, actorName, null, nowUtc, null);
 
         CampaignSignatureAuditEvent event = buildEvent(
                 signature,
@@ -102,7 +118,8 @@ public class CampaignSignatureAuditService {
             Long actorId,
             String actorName,
             String consentStatement,
-            Instant occurredAtUtc
+            Instant occurredAtUtc,
+            ExternalSignatureResult extResult
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("eventType", eventType.name());
@@ -111,6 +128,11 @@ public class CampaignSignatureAuditService {
         payload.put("actorName", actorName);
         payload.put("consentStatement", consentStatement);
         payload.put("occurredAtUtc", occurredAtUtc.toString());
+        if (extResult != null) {
+            payload.put("externalSignatureToken", extResult.getSignatureToken());
+            payload.put("externalProvider", extResult.getProvider());
+            payload.put("externalSignedAt", extResult.getSignedAt());
+        }
 
         try {
             return objectMapper.writeValueAsString(payload);
