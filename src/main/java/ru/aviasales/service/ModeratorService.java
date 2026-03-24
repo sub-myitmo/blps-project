@@ -1,6 +1,5 @@
 package ru.aviasales.service;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +27,7 @@ public class ModeratorService {
     private final CommentRepository commentRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
     private final CampaignSignatureAuditService campaignSignatureAuditService;
+    private final CampaignEdoSyncService campaignEdoSyncService;
     private final EdoOperatorClient edoOperatorClient;
     private final String edoModeratorBoxId;
     private final String edoClientBoxId;
@@ -38,6 +38,7 @@ public class ModeratorService {
             CommentRepository commentRepository,
             CampaignSignatureRepository campaignSignatureRepository,
             CampaignSignatureAuditService campaignSignatureAuditService,
+            CampaignEdoSyncService campaignEdoSyncService,
             EdoOperatorClient edoOperatorClient,
             @Value("${edo.moderator-box-id:stub-moderator-box}") String edoModeratorBoxId,
             @Value("${edo.client-box-id:stub-client-box}") String edoClientBoxId
@@ -47,6 +48,7 @@ public class ModeratorService {
         this.commentRepository = commentRepository;
         this.campaignSignatureRepository = campaignSignatureRepository;
         this.campaignSignatureAuditService = campaignSignatureAuditService;
+        this.campaignEdoSyncService = campaignEdoSyncService;
         this.edoOperatorClient = edoOperatorClient;
         this.edoModeratorBoxId = edoModeratorBoxId;
         this.edoClientBoxId = edoClientBoxId;
@@ -58,7 +60,7 @@ public class ModeratorService {
         Moderator moderator = moderatorRepository.findByApiKey(apiKey)
                 .orElseThrow(() -> new RuntimeException("Moderator not found"));
 
-        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
 
         switch (request.getAction()) {
             case SIGN_DOC:
@@ -132,7 +134,6 @@ public class ModeratorService {
                 signature.setEdoLastSyncedAtUtc(Instant.now());
                 signature.setEdoRawResponse(edoResult.rawResponse());
 
-                // Audit: moderator signed via operator
                 CampaignSignatureAuditService.EdoEvidenceData edoEvidence =
                         new CampaignSignatureAuditService.EdoEvidenceData(
                                 edoResult.operator(),
@@ -142,24 +143,9 @@ public class ModeratorService {
                                 edoResult.senderCertThumbprint()
                         );
 
-                CampaignSignatureAuditService.SignatureCapture moderatorCapture =
-                        campaignSignatureAuditService.captureSignature(
-                                signature,
-                                CampaignSignatureEventType.MODERATOR_SIGNED,
-                                SignatureActorType.MODERATOR,
-                                moderator.getId(),
-                                moderator.getName(),
-                                CampaignSignaturePolicy.MODERATOR_CONSENT_STATEMENT,
-                                edoEvidence
-                        );
-                signature.setModeratorSignedAt(moderatorCapture.occurredAtLegacyUtc());
-                signature.setModeratorSignedAtUtc(moderatorCapture.occurredAtUtc());
-                signature.setModeratorEvidence(moderatorCapture.evidenceJson());
-
                 signature = campaignSignatureRepository.save(signature);
                 campaign.setSignature(signature);
 
-                // Audit: document frozen + operator document sent
                 campaignSignatureAuditService.recordDocumentFrozen(
                         signature,
                         SignatureActorType.MODERATOR,
@@ -171,6 +157,7 @@ public class ModeratorService {
                         SignatureActorType.MODERATOR,
                         moderator.getId(),
                         moderator.getName(),
+                        CampaignSignaturePolicy.MODERATOR_CONSENT_STATEMENT,
                         edoEvidence
                 );
 
@@ -195,15 +182,19 @@ public class ModeratorService {
         return CampaignResponse.fromEntity(campaignRepository.save(campaign));
     }
 
+    @Transactional
     public CampaignResponse getCampaign(Long id) {
-        return CampaignResponse.fromEntity(getCampaignOrThrow(id));
+        AdvertisingCampaign campaign = getCampaignOrThrow(id);
+        campaignEdoSyncService.trySync(campaign, campaign.getSignature());
+        return CampaignResponse.fromEntity(campaign);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CampaignSignatureDetailsResponse getCampaignSignature(Long id) {
         AdvertisingCampaign campaign = getCampaignOrThrow(id);
         CampaignSignature signature = campaignSignatureRepository.findDetailedByCampaign(campaign)
                 .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+        campaignEdoSyncService.trySync(campaign, signature);
         return CampaignSignatureDetailsResponse.fromEntity(signature);
     }
 
@@ -217,6 +208,11 @@ public class ModeratorService {
 
     private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
         return campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new RuntimeException("Campaign not found"));
+    }
+
+    private AdvertisingCampaign getCampaignForActionOrThrow(Long campaignId) {
+        return campaignRepository.findByIdForUpdate(campaignId)
                 .orElseThrow(() -> new RuntimeException("Campaign not found"));
     }
 

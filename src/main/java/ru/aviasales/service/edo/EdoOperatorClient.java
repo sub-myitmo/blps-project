@@ -4,6 +4,8 @@ package ru.aviasales.service.edo;
  * Integration boundary with an ЭДО (electronic document exchange) operator.
  * The backend delegates legal signing responsibility to the operator.
  * The backend NEVER creates qualified electronic signatures itself.
+ * Implementations must map provider-specific states into canonical backend statuses
+ * defined in {@link EdoDocumentStatus}. Raw provider payloads should be preserved separately.
  */
 public interface EdoOperatorClient {
 

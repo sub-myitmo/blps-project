@@ -12,6 +12,7 @@ import ru.aviasales.dal.repository.ClientRepository;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ClientActionRequest;
 import ru.aviasales.service.edo.EdoCounterSignResult;
+import ru.aviasales.service.edo.EdoDocumentStatus;
 import ru.aviasales.service.edo.EdoOperatorClient;
 
 import java.time.Instant;
@@ -25,6 +26,7 @@ public class ClientService {
     private final AdvertisingCampaignRepository campaignRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
     private final CampaignSignatureAuditService campaignSignatureAuditService;
+    private final CampaignEdoSyncService campaignEdoSyncService;
     private final EdoOperatorClient edoOperatorClient;
     private final String edoClientBoxId;
 
@@ -33,6 +35,7 @@ public class ClientService {
             AdvertisingCampaignRepository campaignRepository,
             CampaignSignatureRepository campaignSignatureRepository,
             CampaignSignatureAuditService campaignSignatureAuditService,
+            CampaignEdoSyncService campaignEdoSyncService,
             EdoOperatorClient edoOperatorClient,
             @Value("${edo.client-box-id:stub-client-box}") String edoClientBoxId
     ) {
@@ -40,6 +43,7 @@ public class ClientService {
         this.campaignRepository = campaignRepository;
         this.campaignSignatureRepository = campaignSignatureRepository;
         this.campaignSignatureAuditService = campaignSignatureAuditService;
+        this.campaignEdoSyncService = campaignEdoSyncService;
         this.edoOperatorClient = edoOperatorClient;
         this.edoClientBoxId = edoClientBoxId;
     }
@@ -68,17 +72,19 @@ public class ClientService {
     public CampaignResponse getCampaign(String apiKey, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
         validateAccessOrThrow(apiKey, campaign);
+        campaignEdoSyncService.trySync(campaign, campaign.getSignature());
 
         return CampaignResponse.fromEntity(campaign);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CampaignSignatureDetailsResponse getCampaignSignature(String apiKey, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
         validateAccessOrThrow(apiKey, campaign);
 
         CampaignSignature signature = campaignSignatureRepository.findDetailedByCampaign(campaign)
                 .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+        campaignEdoSyncService.trySync(campaign, signature);
 
         return CampaignSignatureDetailsResponse.fromEntity(signature);
     }
@@ -86,7 +92,7 @@ public class ClientService {
     @Transactional
     public CampaignResponse actionCampaign(String apiKey, Long campaignId,
                                            ClientActionRequest request) {
-        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
         Client client = validateAccessOrThrow(apiKey, campaign);
 
         switch (request.getAction()) {
@@ -99,9 +105,7 @@ public class ClientService {
                 CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
                         .orElseThrow(() -> new RuntimeException("Campaign is not signed by moderator"));
 
-                if (signature.getModeratorId() == null || signature.getModeratorSignedAt() == null) {
-                    throw new RuntimeException("Campaign is not signed by moderator");
-                }
+                campaignEdoSyncService.trySync(campaign, signature);
 
                 requireDocumentHash(signature, request.getDocumentHash());
 
@@ -114,6 +118,15 @@ public class ClientService {
                 // Verify operator document exists
                 if (signature.getEdoMessageId() == null || signature.getEdoEntityId() == null) {
                     throw new RuntimeException("No ЭДО operator document found for this signature");
+                }
+                if (!EdoDocumentStatus.isModeratorConfirmed(signature.getEdoDocumentStatus())) {
+                    throw new RuntimeException("Moderator signature is not yet confirmed by ЭДО operator");
+                }
+                if (signature.isFullySigned() || EdoDocumentStatus.isCountersignInProgress(signature.getEdoDocumentStatus())) {
+                    throw new RuntimeException("Client countersign is already in progress or completed");
+                }
+                if (!EdoDocumentStatus.canInitiateCountersign(signature.getEdoDocumentStatus())) {
+                    throw new RuntimeException("Campaign is not ready for client countersign");
                 }
 
                 // Initiate countersign via ЭДО operator
@@ -130,7 +143,6 @@ public class ClientService {
                 signature.setEdoLastSyncedAtUtc(Instant.now());
                 signature.setEdoRawResponse(counterSignResult.rawResponse());
 
-                // Audit: client signed via operator
                 CampaignSignatureAuditService.EdoEvidenceData edoEvidence =
                         new CampaignSignatureAuditService.EdoEvidenceData(
                                 signature.getEdoOperator(),
@@ -141,32 +153,18 @@ public class ClientService {
                         );
 
                 signature.setClientId(client.getId());
-                CampaignSignatureAuditService.SignatureCapture clientCapture =
-                        campaignSignatureAuditService.captureSignature(
-                                signature,
-                                CampaignSignatureEventType.CLIENT_SIGNED,
-                                SignatureActorType.CLIENT,
-                                client.getId(),
-                                client.getName(),
-                                CampaignSignaturePolicy.CLIENT_CONSENT_STATEMENT,
-                                edoEvidence
-                        );
-                signature.setClientSignedAt(clientCapture.occurredAtLegacyUtc());
-                signature.setClientSignedAtUtc(clientCapture.occurredAtUtc());
-                signature.setClientEvidence(clientCapture.evidenceJson());
-                signature.setFullySigned(true);
-                signature.setFullySignedAtUtc(clientCapture.occurredAtUtc());
-
-                campaign.setSignature(campaignSignatureRepository.save(signature));
-                campaignSignatureAuditService.recordSignatureCompleted(
+                campaignSignatureAuditService.recordEdoCounterSignInitiated(
                         signature,
                         SignatureActorType.CLIENT,
                         client.getId(),
-                        client.getName()
+                        client.getName(),
+                        CampaignSignaturePolicy.CLIENT_CONSENT_STATEMENT,
+                        edoEvidence
                 );
-                campaign.transitionTo(CampaignStatus.WAITING_START);
+                campaign.setSignature(campaignSignatureRepository.save(signature));
                 break;
             case RESUME:
+                validateResumeAllowed(campaign);
                 rejectSignedTermChanges(campaign, request);
                 validateDates(request.getStartDate(), request.getEndDate());
                 campaign.transitionTo(CampaignStatus.WAITING_START);
@@ -185,6 +183,11 @@ public class ClientService {
 
     private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
         return campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new RuntimeException("Campaign not found"));
+    }
+
+    private AdvertisingCampaign getCampaignForActionOrThrow(Long campaignId) {
+        return campaignRepository.findByIdForUpdate(campaignId)
                 .orElseThrow(() -> new RuntimeException("Campaign not found"));
     }
 
@@ -216,6 +219,14 @@ public class ClientService {
     private void validateConsentAccepted(Boolean consentAccepted) {
         if (Boolean.FALSE.equals(consentAccepted)) {
             throw new RuntimeException("Explicit electronic-signature consent is required");
+        }
+    }
+
+    private void validateResumeAllowed(AdvertisingCampaign campaign) {
+        if (campaign.getStatus() != CampaignStatus.PAUSED_BY_CLIENT
+                && campaign.getStatus() != CampaignStatus.PAUSED_BY_MODERATOR
+                && campaign.getStatus() != CampaignStatus.FROZEN) {
+            throw new RuntimeException("Resume is allowed only for paused or frozen campaigns");
         }
     }
 

@@ -1,5 +1,7 @@
 package ru.aviasales.dal.repository;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,6 +20,10 @@ public interface AdvertisingCampaignRepository extends JpaRepository<Advertising
     List<AdvertisingCampaign> findByClient(Client client);
 
     List<AdvertisingCampaign> findByStatus(CampaignStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM AdvertisingCampaign c WHERE c.id = :id")
+    java.util.Optional<AdvertisingCampaign> findByIdForUpdate(@Param("id") Long id);
 
     @Query("SELECT c FROM AdvertisingCampaign c WHERE c.status = 'WAITING_START' " +
             "AND (c.startDate IS NULL OR c.startDate <= :now) " +

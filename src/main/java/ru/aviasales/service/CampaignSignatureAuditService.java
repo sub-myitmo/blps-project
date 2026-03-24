@@ -20,7 +20,7 @@ public class CampaignSignatureAuditService {
 
     private final ObjectMapper objectMapper;
 
-    public SignatureCapture captureSignature(
+    public SignatureCapture recordEvent(
             CampaignSignature signature,
             CampaignSignatureEventType eventType,
             SignatureActorType actorType,
@@ -29,56 +29,61 @@ public class CampaignSignatureAuditService {
             String consentStatement,
             EdoEvidenceData edoData
     ) {
-        Instant nowUtc = Instant.now();
-        LocalDateTime legacyUtc = LocalDateTime.ofInstant(nowUtc, java.time.ZoneOffset.UTC);
+        return recordEvent(signature, eventType, actorType, actorId, actorName,
+                consentStatement, edoData, Instant.now());
+    }
+
+    public SignatureCapture recordEvent(
+            CampaignSignature signature,
+            CampaignSignatureEventType eventType,
+            SignatureActorType actorType,
+            Long actorId,
+            String actorName,
+            String consentStatement,
+            EdoEvidenceData edoData,
+            Instant occurredAtUtc
+    ) {
+        LocalDateTime legacyUtc = LocalDateTime.ofInstant(occurredAtUtc, java.time.ZoneOffset.UTC);
 
         String evidence = buildEvidence(eventType, actorType, actorId, actorName,
-                consentStatement, nowUtc, edoData);
+                consentStatement, occurredAtUtc, edoData);
 
         CampaignSignatureAuditEvent event = buildEvent(signature, eventType, actorType,
-                actorId, actorName, evidence, nowUtc, legacyUtc);
+                actorId, actorName, evidence, occurredAtUtc, legacyUtc);
         signature.getAuditEvents().add(event);
 
-        return new SignatureCapture(nowUtc, legacyUtc, evidence);
+        return new SignatureCapture(occurredAtUtc, legacyUtc, evidence);
     }
 
     public void recordEdoDocumentSent(CampaignSignature signature, SignatureActorType actorType,
-                                       Long actorId, String actorName, EdoEvidenceData edoData) {
-        Instant nowUtc = Instant.now();
-        LocalDateTime legacyUtc = LocalDateTime.ofInstant(nowUtc, java.time.ZoneOffset.UTC);
-        String evidence = buildEvidence(CampaignSignatureEventType.EDO_DOCUMENT_SENT,
-                actorType, actorId, actorName, null, nowUtc, edoData);
+                                       Long actorId, String actorName, String consentStatement,
+                                       EdoEvidenceData edoData) {
+        recordEvent(signature, CampaignSignatureEventType.EDO_DOCUMENT_SENT,
+                actorType, actorId, actorName, consentStatement, edoData);
+    }
 
-        CampaignSignatureAuditEvent event = buildEvent(signature,
-                CampaignSignatureEventType.EDO_DOCUMENT_SENT,
-                actorType, actorId, actorName, evidence, nowUtc, legacyUtc);
-        signature.getAuditEvents().add(event);
+    public void recordEdoCounterSignInitiated(CampaignSignature signature, SignatureActorType actorType,
+                                              Long actorId, String actorName, String consentStatement,
+                                              EdoEvidenceData edoData) {
+        recordEvent(signature, CampaignSignatureEventType.EDO_COUNTERSIGN_INITIATED,
+                actorType, actorId, actorName, consentStatement, edoData);
     }
 
     public void recordDocumentFrozen(CampaignSignature signature, SignatureActorType actorType,
                                       Long actorId, String actorName) {
-        Instant nowUtc = Instant.now();
-        LocalDateTime legacyUtc = LocalDateTime.ofInstant(nowUtc, java.time.ZoneOffset.UTC);
-        String evidence = buildEvidence(CampaignSignatureEventType.DOCUMENT_FROZEN,
-                actorType, actorId, actorName, null, nowUtc, null);
-
-        CampaignSignatureAuditEvent event = buildEvent(signature,
-                CampaignSignatureEventType.DOCUMENT_FROZEN,
-                actorType, actorId, actorName, evidence, nowUtc, legacyUtc);
-        signature.getAuditEvents().add(event);
+        recordEvent(signature, CampaignSignatureEventType.DOCUMENT_FROZEN,
+                actorType, actorId, actorName, null, null);
     }
 
     public void recordSignatureCompleted(CampaignSignature signature, SignatureActorType actorType,
                                           Long actorId, String actorName) {
-        Instant nowUtc = Instant.now();
-        LocalDateTime legacyUtc = LocalDateTime.ofInstant(nowUtc, java.time.ZoneOffset.UTC);
-        String evidence = buildEvidence(CampaignSignatureEventType.SIGNATURE_COMPLETED,
-                actorType, actorId, actorName, null, nowUtc, null);
+        recordSignatureCompleted(signature, actorType, actorId, actorName, Instant.now());
+    }
 
-        CampaignSignatureAuditEvent event = buildEvent(signature,
-                CampaignSignatureEventType.SIGNATURE_COMPLETED,
-                actorType, actorId, actorName, evidence, nowUtc, legacyUtc);
-        signature.getAuditEvents().add(event);
+    public void recordSignatureCompleted(CampaignSignature signature, SignatureActorType actorType,
+                                         Long actorId, String actorName, Instant occurredAtUtc) {
+        recordEvent(signature, CampaignSignatureEventType.SIGNATURE_COMPLETED,
+                actorType, actorId, actorName, null, null, occurredAtUtc);
     }
 
     private CampaignSignatureAuditEvent buildEvent(

@@ -2,9 +2,6 @@ package ru.aviasales.service.edo;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -13,9 +10,11 @@ import org.springframework.web.client.RestTemplate;
  * Activate via profile "diadoc-prod".
  *
  * Production usage requires:
- * - Diadoc API credentials (ddauth token or login/password)
- * - КриптоПро CSP on server for certificate-based operations
- * - Registered organization boxes in Diadoc
+ * - Explicit mapping from Diadoc transport/auth model to this backend's canonical
+ *   statuses in {@link EdoDocumentStatus}
+ * - A chosen signing architecture outside this backend; this service must not assume
+ *   the backend itself performs cryptographic signing
+ * - Registered organization boxes and verified operator-side document workflow
  *
  * Current implementation: throws UnsupportedOperationException.
  * This is intentional — it marks the exact boundary where
@@ -45,8 +44,8 @@ public class DiadocEdoOperatorClient implements EdoOperatorClient {
         // with document content, sender/recipient BoxIds, and signing request.
         // Returns MessageId + EntityId from Diadoc response.
         throw new UnsupportedOperationException(
-                "Real Diadoc integration requires API credentials and КриптоПро setup. " +
-                "Use profile 'diadoc-stub' for lab/testing."
+                "Real Diadoc integration requires a concrete Diadoc auth/signing flow. " +
+                "Use the default stub outside the 'diadoc-prod' profile."
         );
     }
 
@@ -66,12 +65,5 @@ public class DiadocEdoOperatorClient implements EdoOperatorClient {
         throw new UnsupportedOperationException(
                 "Real Diadoc integration not configured."
         );
-    }
-
-    private HttpHeaders buildHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "DiadocAuth ddauth_api_client_id=" + diadocApiKey);
-        return headers;
     }
 }
