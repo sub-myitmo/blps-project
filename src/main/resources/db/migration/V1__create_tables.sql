@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS advertising_campaigns (
     target_url VARCHAR(500) NOT NULL,
     daily_budget DECIMAL(10,2) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    start_date TIMESTAMP NOT NULL,
-    end_date TIMESTAMP,
+    start_date DATE NOT NULL,
+    end_date DATE,
     status VARCHAR(50) NOT NULL,
     client_id BIGINT NOT NULL REFERENCES clients(id)
 );

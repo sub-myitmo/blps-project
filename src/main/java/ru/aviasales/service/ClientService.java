@@ -16,7 +16,7 @@ import ru.aviasales.service.edo.EdoDocumentStatus;
 import ru.aviasales.service.edo.EdoOperatorClient;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.Objects;
 
 @Service
@@ -202,11 +202,11 @@ public class ClientService {
         return client;
     }
 
-    private void validateDates(LocalDateTime startDate, LocalDateTime endDate) {
+    private void validateDates(LocalDate startDate, LocalDate endDate) {
         if (startDate == null) {
             throw new RuntimeException("Start date must be not null");
         }
-        if (startDate.isBefore(LocalDateTime.now())) {
+        if (startDate.isBefore(LocalDate.now())) {
             throw new RuntimeException("Start date cannot be in the past");
         }
         if (endDate != null) {

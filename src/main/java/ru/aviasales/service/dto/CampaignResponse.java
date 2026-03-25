@@ -7,6 +7,7 @@ import ru.aviasales.dal.model.CampaignSignature;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -17,8 +18,8 @@ public class CampaignResponse {
     private String content;
     private String targetUrl;
     private BigDecimal dailyBudget;
-    private LocalDateTime startDate;
-    private LocalDateTime endDate;
+    private LocalDate startDate;
+    private LocalDate endDate;
     private CampaignStatus status;
     private LocalDateTime createdAt;
     private List<CommentResponse> moderationComments;

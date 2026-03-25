@@ -15,7 +15,6 @@ import ru.aviasales.dal.repository.TransactionRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -34,10 +33,10 @@ public class DailySpendService {
     public void processDailySpending() {
         log.info("Starting daily spending processing");
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDate today = LocalDate.now();
 
-        startScheduledCampaigns(now);
-        completeExpiredCampaigns(now);
+        startScheduledCampaigns(today);
+        completeExpiredCampaigns(today);
 
         List<AdvertisingCampaign> activeCampaigns = campaignRepository
                 .findByStatus(CampaignStatus.ACTIVE);
@@ -77,8 +76,8 @@ public class DailySpendService {
         log.info("Daily spending processing completed");
     }
 
-    private void startScheduledCampaigns(LocalDateTime now) {
-        List<AdvertisingCampaign> readyToStart = campaignRepository.findReadyToStart(now);
+    private void startScheduledCampaigns(LocalDate today) {
+        List<AdvertisingCampaign> readyToStart = campaignRepository.findReadyToStart(today);
 
         for (AdvertisingCampaign campaign : readyToStart) {
             if (campaign.getClient().getBalance().compareTo(campaign.getDailyBudget()) >= 0) {
@@ -93,8 +92,8 @@ public class DailySpendService {
         }
     }
 
-    private void completeExpiredCampaigns(LocalDateTime now) {
-        List<AdvertisingCampaign> expired = campaignRepository.findExpiredActive(now);
+    private void completeExpiredCampaigns(LocalDate today) {
+        List<AdvertisingCampaign> expired = campaignRepository.findExpiredActive(today);
 
         for (AdvertisingCampaign campaign : expired) {
             campaign.transitionTo(CampaignStatus.COMPLETED);

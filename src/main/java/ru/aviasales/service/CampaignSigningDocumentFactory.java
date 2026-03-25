@@ -2,7 +2,7 @@ package ru.aviasales.service;
 
 import ru.aviasales.dal.model.AdvertisingCampaign;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 public final class CampaignSigningDocumentFactory {
     public static final String TEMPLATE_VERSION = "v1";
@@ -28,7 +28,7 @@ public final class CampaignSigningDocumentFactory {
         return value == null ? "" : value;
     }
 
-    private static String asIso(LocalDateTime value) {
+    private static String asIso(LocalDate value) {
         return value == null ? "" : value.toString();
     }
 }

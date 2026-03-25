@@ -11,7 +11,7 @@ import ru.aviasales.dal.model.AdvertisingCampaign;
 import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.dal.model.Client;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 
 @Repository
@@ -26,13 +26,13 @@ public interface AdvertisingCampaignRepository extends JpaRepository<Advertising
     java.util.Optional<AdvertisingCampaign> findByIdForUpdate(@Param("id") Long id);
 
     @Query("SELECT c FROM AdvertisingCampaign c WHERE c.status = 'WAITING_START' " +
-            "AND (c.startDate IS NULL OR c.startDate <= :now) " +
-            "AND (c.endDate IS NULL OR c.endDate > :now)")
-    List<AdvertisingCampaign> findReadyToStart(@Param("now") LocalDateTime now);
+            "AND (c.startDate IS NULL OR c.startDate <= :today) " +
+            "AND (c.endDate IS NULL OR c.endDate >= :today)")
+    List<AdvertisingCampaign> findReadyToStart(@Param("today") LocalDate today);
 
     @Query("SELECT c FROM AdvertisingCampaign c WHERE c.status = 'ACTIVE' " +
-            "AND (c.endDate IS NOT NULL AND c.endDate <= :now)")
-    List<AdvertisingCampaign> findExpiredActive(@Param("now") LocalDateTime now);
+            "AND (c.endDate IS NOT NULL AND c.endDate < :today)")
+    List<AdvertisingCampaign> findExpiredActive(@Param("today") LocalDate today);
 
     @Modifying
     @Query("UPDATE AdvertisingCampaign c SET c.status = 'FROZEN' " +

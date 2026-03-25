@@ -3,7 +3,7 @@ package ru.aviasales.service.dto;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Data
 public class ClientActionRequest {
@@ -11,8 +11,8 @@ public class ClientActionRequest {
     @NotNull(message = "Действие обязательно")
     private ClientAction action;
 
-    private LocalDateTime startDate;
-    private LocalDateTime endDate;
+    private LocalDate startDate;
+    private LocalDate endDate;
     private Boolean consentAccepted;
     private String documentHash;
 

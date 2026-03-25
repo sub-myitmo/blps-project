@@ -3,7 +3,7 @@ package ru.aviasales.service.dto;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Data
 public class CampaignRequest {
@@ -26,7 +26,7 @@ public class CampaignRequest {
     private BigDecimal dailyBudget;
 
     @NotNull(message = "Время начала обязательно")
-    private LocalDateTime startDate;
+    private LocalDate startDate;
 
-    private LocalDateTime endDate;
+    private LocalDate endDate;
 }
