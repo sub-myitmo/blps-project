@@ -250,6 +250,16 @@ public class ClientService {
         return campaignDocumentPdfService.generateFrozenDocumentPdf(signature);
     }
 
+    @Transactional
+    public CampaignSignature getSignatureWithArtifactSync(String apiKey, Long campaignId) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        validateAccessOrThrow(apiKey, campaign);
+        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+        campaignEdoSyncService.trySync(campaign, signature);
+        return signature;
+    }
+
     private void rejectSignedTermChanges(AdvertisingCampaign campaign, ClientActionRequest request) {
         CampaignSignature signature = campaign.getSignature();
         if (signature == null || !signature.isFullySigned()) {

@@ -112,6 +112,9 @@ public class ModeratorService {
                 signature.setEdoClientCertThumbprint(null);
                 signature.setEdoLastSyncedAtUtc(null);
                 signature.setEdoRawResponse(null);
+                signature.setSignatureArtifact(null);
+                signature.setSignatureArtifactContentType(null);
+                signature.setSignatureArtifactFilename(null);
 
                 signature = campaignSignatureRepository.save(signature);
 
@@ -217,6 +220,15 @@ public class ModeratorService {
                 .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
 
         return campaignDocumentPdfService.generateFrozenDocumentPdf(signature);
+    }
+
+    @Transactional
+    public CampaignSignature getSignatureWithArtifactSync(Long campaignId) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+        campaignEdoSyncService.trySync(campaign, signature);
+        return signature;
     }
 
     private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {

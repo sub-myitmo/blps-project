@@ -105,6 +105,15 @@ public class CampaignSignature {
     @Column(name = "edo_raw_response", columnDefinition = "TEXT")
     private String edoRawResponse;
 
+    @Column(name = "signature_artifact")
+    private byte[] signatureArtifact;
+
+    @Column(name = "signature_artifact_content_type", length = 128)
+    private String signatureArtifactContentType;
+
+    @Column(name = "signature_artifact_filename", length = 255)
+    private String signatureArtifactFilename;
+
     @OneToMany(mappedBy = "signature", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("occurredAtUtc ASC")
     private List<CampaignSignatureAuditEvent> auditEvents = new ArrayList<>();

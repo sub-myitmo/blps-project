@@ -10,12 +10,14 @@ import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.dal.model.SignatureActorType;
 import ru.aviasales.service.edo.EdoDocumentStatus;
 import ru.aviasales.service.edo.EdoOperatorClient;
+import ru.aviasales.service.edo.EdoSignatureArtifact;
 import ru.aviasales.service.edo.EdoSigningStatus;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -132,6 +134,8 @@ public class CampaignEdoSyncService {
             if (campaign.getStatus() == CampaignStatus.AT_SIGNING) {
                 campaign.transitionTo(CampaignStatus.WAITING_START);
             }
+
+            tryFetchArtifact(signature);
         }
         if (status.recipientSignedAt() != null && signature.getClientSignedAtUtc() == null) {
             signature.setClientSignedAtUtc(status.recipientSignedAt());
@@ -142,6 +146,24 @@ public class CampaignEdoSyncService {
         }
 
         return true;
+    }
+
+    private void tryFetchArtifact(CampaignSignature signature) {
+        if (signature.getSignatureArtifact() != null) {
+            return;
+        }
+        try {
+            Optional<EdoSignatureArtifact> artifact = edoOperatorClient.fetchSignatureArtifact(
+                    signature.getEdoMessageId(), signature.getEdoEntityId()
+            );
+            artifact.ifPresent(a -> {
+                signature.setSignatureArtifact(a.content());
+                signature.setSignatureArtifactContentType(a.contentType());
+                signature.setSignatureArtifactFilename(a.filename());
+            });
+        } catch (RuntimeException e) {
+            log.warn("Failed to fetch signature artifact for campaign {}", signature.getCampaign().getId(), e);
+        }
     }
 
     private boolean hasEvent(CampaignSignature signature, CampaignSignatureEventType eventType) {

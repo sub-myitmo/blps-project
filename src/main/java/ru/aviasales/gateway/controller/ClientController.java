@@ -4,14 +4,18 @@ package ru.aviasales.gateway.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import ru.aviasales.dal.model.CampaignSignature;
 import ru.aviasales.service.dto.CampaignRequest;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.ClientService;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ClientActionRequest;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/client/campaigns")
@@ -62,5 +66,25 @@ public class ClientController {
                         "attachment; filename=\"campaign-" + id + "-document.pdf\"")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
+    }
+
+    @GetMapping("/{id}/signature/artifact")
+    public ResponseEntity<?> downloadSignatureArtifact(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long id) {
+        CampaignSignature signature = clientService.getSignatureWithArtifactSync(apiKey, id);
+        if (signature.getSignatureArtifact() == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "error", "Signature artifact not available",
+                            "reason", "The ЭДО operator has not provided a downloadable signature artifact. " +
+                                    "Only signature metadata/evidence is currently available."
+                    ));
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + signature.getSignatureArtifactFilename() + "\"")
+                .contentType(MediaType.parseMediaType(signature.getSignatureArtifactContentType()))
+                .body(signature.getSignatureArtifact());
     }
 }

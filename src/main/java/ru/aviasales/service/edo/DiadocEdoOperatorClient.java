@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Optional;
+
 /**
  * Real Diadoc API client skeleton.
  * Activate via profile "diadoc-prod".
@@ -62,6 +64,16 @@ public class DiadocEdoOperatorClient implements EdoOperatorClient {
     public EdoCounterSignResult initiateCounterSign(String messageId, String entityId,
                                                      String counterpartyBoxId) {
         // Real implementation: POST /V3/PostMessagePatch with RecipientSignature
+        throw new UnsupportedOperationException(
+                "Real Diadoc integration not configured."
+        );
+    }
+
+    @Override
+    public Optional<EdoSignatureArtifact> fetchSignatureArtifact(String messageId, String entityId) {
+        // Real implementation: GET /V3/GetEntityContent?boxId={}&messageId={}&entityId={}
+        // Returns the raw signature entity bytes (CMS/PKCS#7) from the Diadoc operator.
+        // Content-Type from Diadoc is typically "application/pkcs7-signature".
         throw new UnsupportedOperationException(
                 "Real Diadoc integration not configured."
         );

@@ -34,6 +34,9 @@ public class CampaignSignatureDetailsResponse {
     private String edoModeratorCertThumbprint;
     private String edoClientCertThumbprint;
     private Instant edoLastSyncedAtUtc;
+    private boolean signatureArtifactAvailable;
+    private String signatureArtifactContentType;
+    private String signatureArtifactFilename;
     private List<AuditEventResponse> auditEvents;
 
     public static CampaignSignatureDetailsResponse fromEntity(CampaignSignature signature) {
@@ -60,6 +63,9 @@ public class CampaignSignatureDetailsResponse {
         response.setEdoModeratorCertThumbprint(signature.getEdoModeratorCertThumbprint());
         response.setEdoClientCertThumbprint(signature.getEdoClientCertThumbprint());
         response.setEdoLastSyncedAtUtc(signature.getEdoLastSyncedAtUtc());
+        response.setSignatureArtifactAvailable(signature.getSignatureArtifact() != null);
+        response.setSignatureArtifactContentType(signature.getSignatureArtifactContentType());
+        response.setSignatureArtifactFilename(signature.getSignatureArtifactFilename());
         response.setAuditEvents(signature.getAuditEvents().stream().map(AuditEventResponse::fromEntity).toList());
         return response;
     }
