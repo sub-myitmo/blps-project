@@ -3,6 +3,8 @@ package ru.aviasales.gateway.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.aviasales.service.dto.CampaignRequest;
@@ -48,5 +50,17 @@ public class ClientController {
             @RequestHeader("Authorization") String apiKey,
             @PathVariable Long id) {
         return ResponseEntity.ok(clientService.getCampaignSignature(apiKey, id));
+    }
+
+    @GetMapping("/{id}/signature/document.pdf")
+    public ResponseEntity<byte[]> downloadFrozenDocumentPdf(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long id) {
+        byte[] pdf = clientService.getFrozenDocumentPdf(apiKey, id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"campaign-" + id + "-document.pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 }

@@ -28,6 +28,7 @@ public class ClientService {
     private final CampaignSignatureAuditService campaignSignatureAuditService;
     private final CampaignEdoSyncService campaignEdoSyncService;
     private final EdoOperatorClient edoOperatorClient;
+    private final CampaignDocumentPdfService campaignDocumentPdfService;
     private final String edoClientBoxId;
 
     public ClientService(
@@ -37,6 +38,7 @@ public class ClientService {
             CampaignSignatureAuditService campaignSignatureAuditService,
             CampaignEdoSyncService campaignEdoSyncService,
             EdoOperatorClient edoOperatorClient,
+            CampaignDocumentPdfService campaignDocumentPdfService,
             @Value("${edo.client-box-id:stub-client-box}") String edoClientBoxId
     ) {
         this.clientRepository = clientRepository;
@@ -45,6 +47,7 @@ public class ClientService {
         this.campaignSignatureAuditService = campaignSignatureAuditService;
         this.campaignEdoSyncService = campaignEdoSyncService;
         this.edoOperatorClient = edoOperatorClient;
+        this.campaignDocumentPdfService = campaignDocumentPdfService;
         this.edoClientBoxId = edoClientBoxId;
     }
 
@@ -234,6 +237,17 @@ public class ClientService {
         if (documentHash != null && !documentHash.isBlank() && !signature.getDocumentHash().equals(documentHash)) {
             throw new RuntimeException("Document hash confirmation mismatch");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] getFrozenDocumentPdf(String apiKey, Long campaignId) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        validateAccessOrThrow(apiKey, campaign);
+
+        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+
+        return campaignDocumentPdfService.generateFrozenDocumentPdf(signature);
     }
 
     private void rejectSignedTermChanges(AdvertisingCampaign campaign, ClientActionRequest request) {

@@ -29,6 +29,7 @@ public class ModeratorService {
     private final CampaignSignatureAuditService campaignSignatureAuditService;
     private final CampaignEdoSyncService campaignEdoSyncService;
     private final EdoOperatorClient edoOperatorClient;
+    private final CampaignDocumentPdfService campaignDocumentPdfService;
     private final String edoModeratorBoxId;
     private final String edoClientBoxId;
 
@@ -40,6 +41,7 @@ public class ModeratorService {
             CampaignSignatureAuditService campaignSignatureAuditService,
             CampaignEdoSyncService campaignEdoSyncService,
             EdoOperatorClient edoOperatorClient,
+            CampaignDocumentPdfService campaignDocumentPdfService,
             @Value("${edo.moderator-box-id:stub-moderator-box}") String edoModeratorBoxId,
             @Value("${edo.client-box-id:stub-client-box}") String edoClientBoxId
     ) {
@@ -50,6 +52,7 @@ public class ModeratorService {
         this.campaignSignatureAuditService = campaignSignatureAuditService;
         this.campaignEdoSyncService = campaignEdoSyncService;
         this.edoOperatorClient = edoOperatorClient;
+        this.campaignDocumentPdfService = campaignDocumentPdfService;
         this.edoModeratorBoxId = edoModeratorBoxId;
         this.edoClientBoxId = edoClientBoxId;
     }
@@ -204,6 +207,16 @@ public class ModeratorService {
         return campaigns.stream()
                 .map(CampaignResponse::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] getFrozenDocumentPdf(Long campaignId) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+
+        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+
+        return campaignDocumentPdfService.generateFrozenDocumentPdf(signature);
     }
 
     private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
