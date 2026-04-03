@@ -9,12 +9,10 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.aviasales.dal.model.CampaignSignature;
-import ru.aviasales.service.dto.CampaignRequest;
-import ru.aviasales.service.dto.CampaignResponse;
+import ru.aviasales.service.dto.*;
 import ru.aviasales.service.ClientService;
-import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
-import ru.aviasales.service.dto.ClientActionRequest;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -24,11 +22,26 @@ public class ClientController {
 
     private final ClientService clientService;
 
+    @GetMapping("")
+    public ResponseEntity<List<CampaignResponse>> getCampaignsByClient(
+            @RequestHeader("Authorization") String apiKey) {
+        return ResponseEntity.ok(clientService.getCampaignsByClient(apiKey));
+    }
+
     @PostMapping("")
     public ResponseEntity<CampaignResponse> createCampaign(
             @RequestHeader("Authorization") String apiKey,
             @Valid @RequestBody CampaignRequest request) {
         CampaignResponse response = clientService.createCampaign(apiKey, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<CampaignResponse> updateCampaign(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateCampaignRequest request) {
+        CampaignResponse response = clientService.updateCampaign(apiKey, id, request);
         return ResponseEntity.ok(response);
     }
 

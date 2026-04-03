@@ -4,20 +4,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.aviasales.dal.model.*;
-import ru.aviasales.service.dto.CampaignRequest;
-import ru.aviasales.service.dto.CampaignResponse;
+import ru.aviasales.service.dto.*;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.CampaignSignatureRepository;
 import ru.aviasales.dal.repository.ClientRepository;
-import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
-import ru.aviasales.service.dto.ClientActionRequest;
 import ru.aviasales.service.edo.EdoCounterSignResult;
 import ru.aviasales.service.edo.EdoDocumentStatus;
 import ru.aviasales.service.edo.EdoOperatorClient;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class ClientService {
@@ -52,6 +51,15 @@ public class ClientService {
     }
 
     @Transactional
+    public List<CampaignResponse> getCampaignsByClient(String apiKey) {
+        List<AdvertisingCampaign> campaigns = campaignRepository
+                .findByClient(getClientOrThrow(apiKey));
+        return campaigns.stream()
+                .map(CampaignResponse::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
     public CampaignResponse createCampaign(String apiKey, CampaignRequest request) {
         Client client = clientRepository.findByApiKey(apiKey)
                 .orElseThrow(() -> new RuntimeException("Client not found"));
@@ -66,6 +74,27 @@ public class ClientService {
         campaign.setEndDate(request.getEndDate());
         campaign.setClient(client);
         campaign.setStatus(CampaignStatus.PENDING);
+
+        AdvertisingCampaign saved = campaignRepository.save(campaign);
+        return CampaignResponse.fromEntity(saved);
+    }
+
+    @Transactional
+    public CampaignResponse updateCampaign(String apiKey, Long campaignId, UpdateCampaignRequest request) {
+        AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
+        validateAccessOrThrow(apiKey, campaign);
+        LocalDate startDate = request.getStartDate() == null ? campaign.getStartDate() : request.getStartDate();
+        LocalDate endDate = request.getEndDate() == null ? campaign.getEndDate() : request.getEndDate();
+
+        validateDates(startDate, endDate);
+
+        campaign.setName(request.getName() == null ? campaign.getName() : request.getName());
+        campaign.setContent(request.getContent() == null ? campaign.getContent() : request.getContent());
+        campaign.setTargetUrl(request.getTargetUrl() == null ? campaign.getTargetUrl() : request.getTargetUrl());
+        campaign.setDailyBudget(request.getDailyBudget() == null ? campaign.getDailyBudget() : request.getDailyBudget());
+        campaign.setStartDate(startDate);
+        campaign.setEndDate(endDate);
+        campaign.transitionTo(CampaignStatus.PENDING);
 
         AdvertisingCampaign saved = campaignRepository.save(campaign);
         return CampaignResponse.fromEntity(saved);
@@ -189,14 +218,18 @@ public class ClientService {
                 .orElseThrow(() -> new RuntimeException("Campaign not found"));
     }
 
+    private Client getClientOrThrow(String apiKey) {
+        return clientRepository.findByApiKey(apiKey)
+                .orElseThrow(() -> new RuntimeException("Client not found"));
+    }
+
     private AdvertisingCampaign getCampaignForActionOrThrow(Long campaignId) {
         return campaignRepository.findByIdForUpdate(campaignId)
                 .orElseThrow(() -> new RuntimeException("Campaign not found"));
     }
 
     private Client validateAccessOrThrow(String apiKey, AdvertisingCampaign campaign) {
-        Client client = clientRepository.findByApiKey(apiKey)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
+        Client client = getClientOrThrow(apiKey);
 
         if (!campaign.getClient().getId().equals(client.getId())) {
             throw new RuntimeException("Access denied");
