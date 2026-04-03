@@ -1,4 +1,4 @@
-package ru.aviasales.service;
+package ru.aviasales.service.doc;
 
 public final class CampaignSignaturePolicy {
     public static final String MODERATOR_CONSENT_STATEMENT =

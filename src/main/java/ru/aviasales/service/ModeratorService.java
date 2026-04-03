@@ -8,6 +8,7 @@ import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.CampaignSignatureRepository;
 import ru.aviasales.dal.repository.CommentRepository;
 import ru.aviasales.dal.repository.ModeratorRepository;
+import ru.aviasales.service.doc.*;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ModeratorActionRequest;

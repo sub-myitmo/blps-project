@@ -1,4 +1,4 @@
-package ru.aviasales.service;
+package ru.aviasales.service.doc;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;

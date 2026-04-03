@@ -1,4 +1,4 @@
-package ru.aviasales.service;
+package ru.aviasales.service.doc;
 
 import ru.aviasales.dal.model.AdvertisingCampaign;
 

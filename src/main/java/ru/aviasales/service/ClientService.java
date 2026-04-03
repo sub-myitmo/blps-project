@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.aviasales.dal.model.*;
+import ru.aviasales.service.doc.*;
 import ru.aviasales.service.dto.*;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.CampaignSignatureRepository;

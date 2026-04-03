@@ -1,4 +1,4 @@
-package ru.aviasales.service;
+package ru.aviasales.service.doc;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

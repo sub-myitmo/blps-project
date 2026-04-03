@@ -1,4 +1,4 @@
-package ru.aviasales.service;
+package ru.aviasales.service.doc;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

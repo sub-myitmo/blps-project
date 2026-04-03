@@ -11,6 +11,9 @@ import ru.aviasales.dal.repository.ModeratorRepository;
 @Component
 @RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
+    public static final String CLIENT_PATH = "/api/client";
+    public static final String PAYMENT_PATH = "/api/payment";
+    public static final String MODERATOR_PATH = "/api/moderator";
 
     private final ClientRepository clientRepository;
     private final ModeratorRepository moderatorRepository;
@@ -26,11 +29,11 @@ public class AuthInterceptor implements HandlerInterceptor {
             throw new RuntimeException("API key is required");
         }
 
-        if (path.startsWith("/api/client") || path.startsWith("/api/payment")) {
+        if (path.startsWith(CLIENT_PATH) || path.startsWith(PAYMENT_PATH)) {
             if (!clientRepository.existsByApiKey(apiKey)) {
                 throw new RuntimeException("Invalid client API key");
             }
-        } else if (path.startsWith("/api/moderator")) {
+        } else if (path.startsWith(MODERATOR_PATH)) {
             if (!moderatorRepository.existsByApiKey(apiKey)) {
                 throw new RuntimeException("Invalid moderator API key");
             }
