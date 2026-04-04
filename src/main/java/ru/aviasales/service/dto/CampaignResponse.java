@@ -24,15 +24,9 @@ public class CampaignResponse {
     private LocalDateTime createdAt;
     private List<CommentResponse> moderationComments;
     private String documentHash;
-    private String hashAlgorithm;
-    private String documentTemplateVersion;
-    private LocalDateTime moderatorSignedAt;
     private Instant moderatorSignedAtUtc;
-    private LocalDateTime clientSignedAt;
     private Instant clientSignedAtUtc;
     private boolean fullySigned;
-    private String edoOperator;
-    private String edoDocumentStatus;
 
     public static CampaignResponse fromEntity(AdvertisingCampaign campaign) {
         CampaignResponse response = new CampaignResponse();
@@ -50,15 +44,9 @@ public class CampaignResponse {
         CampaignSignature signature = campaign.getSignature();
         if (signature != null) {
             response.setDocumentHash(signature.getDocumentHash());
-            response.setHashAlgorithm(signature.getHashAlgorithm());
-            response.setDocumentTemplateVersion(signature.getDocumentTemplateVersion());
-            response.setModeratorSignedAt(signature.getModeratorSignedAt());
             response.setModeratorSignedAtUtc(signature.getModeratorSignedAtUtc());
-            response.setClientSignedAt(signature.getClientSignedAt());
             response.setClientSignedAtUtc(signature.getClientSignedAtUtc());
             response.setFullySigned(signature.isFullySigned());
-            response.setEdoOperator(signature.getEdoOperator());
-            response.setEdoDocumentStatus(signature.getEdoDocumentStatus());
         }
 
         return response;
