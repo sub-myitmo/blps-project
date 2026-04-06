@@ -1,6 +1,5 @@
 package ru.aviasales.service;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.aviasales.dal.model.*;
@@ -9,9 +8,6 @@ import ru.aviasales.service.dto.*;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.CampaignSignatureRepository;
 import ru.aviasales.dal.repository.ClientRepository;
-import ru.aviasales.service.edo.EdoCounterSignResult;
-import ru.aviasales.service.edo.EdoDocumentStatus;
-import ru.aviasales.service.edo.EdoOperatorClient;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -25,30 +21,15 @@ public class ClientService {
     private final ClientRepository clientRepository;
     private final AdvertisingCampaignRepository campaignRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
-    private final CampaignSignatureAuditService campaignSignatureAuditService;
-    private final CampaignEdoSyncService campaignEdoSyncService;
-    private final EdoOperatorClient edoOperatorClient;
-    private final CampaignDocumentPdfService campaignDocumentPdfService;
-    private final String edoClientBoxId;
 
     public ClientService(
             ClientRepository clientRepository,
             AdvertisingCampaignRepository campaignRepository,
-            CampaignSignatureRepository campaignSignatureRepository,
-            CampaignSignatureAuditService campaignSignatureAuditService,
-            CampaignEdoSyncService campaignEdoSyncService,
-            EdoOperatorClient edoOperatorClient,
-            CampaignDocumentPdfService campaignDocumentPdfService,
-            @Value("${edo.client-box-id:stub-client-box}") String edoClientBoxId
+            CampaignSignatureRepository campaignSignatureRepository
     ) {
         this.clientRepository = clientRepository;
         this.campaignRepository = campaignRepository;
         this.campaignSignatureRepository = campaignSignatureRepository;
-        this.campaignSignatureAuditService = campaignSignatureAuditService;
-        this.campaignEdoSyncService = campaignEdoSyncService;
-        this.edoOperatorClient = edoOperatorClient;
-        this.campaignDocumentPdfService = campaignDocumentPdfService;
-        this.edoClientBoxId = edoClientBoxId;
     }
 
     @Transactional
@@ -101,23 +82,20 @@ public class ClientService {
         return CampaignResponse.fromEntity(saved);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public CampaignResponse getCampaign(String apiKey, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
         validateAccessOrThrow(apiKey, campaign);
-        campaignEdoSyncService.trySync(campaign, campaign.getSignature());
-
         return CampaignResponse.fromEntity(campaign);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public CampaignSignatureDetailsResponse getCampaignSignature(String apiKey, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
         validateAccessOrThrow(apiKey, campaign);
 
-        CampaignSignature signature = campaignSignatureRepository.findDetailedByCampaign(campaign)
+        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
                 .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
-        campaignEdoSyncService.trySync(campaign, signature);
 
         return CampaignSignatureDetailsResponse.fromEntity(signature);
     }
@@ -138,8 +116,6 @@ public class ClientService {
                 CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
                         .orElseThrow(() -> new RuntimeException("Campaign is not signed by moderator"));
 
-                campaignEdoSyncService.trySync(campaign, signature);
-
                 requireDocumentHash(signature, request.getDocumentHash());
 
                 // Verify document integrity — catch illegal mutations after freeze
@@ -148,53 +124,14 @@ public class ClientService {
                     throw new RuntimeException("Campaign document hash mismatch");
                 }
 
-                // Verify operator document exists
-                if (signature.getEdoMessageId() == null || signature.getEdoEntityId() == null) {
-                    throw new RuntimeException("No ЭДО operator document found for this signature");
-                }
-                if (!EdoDocumentStatus.isModeratorConfirmed(signature.getEdoDocumentStatus())) {
-                    throw new RuntimeException("Moderator signature is not yet confirmed by ЭДО operator");
-                }
-                if (signature.isFullySigned() || EdoDocumentStatus.isCountersignInProgress(signature.getEdoDocumentStatus())) {
-                    throw new RuntimeException("Client countersign is already in progress or completed");
-                }
-                if (!EdoDocumentStatus.canInitiateCountersign(signature.getEdoDocumentStatus())) {
-                    throw new RuntimeException("Campaign is not ready for client countersign");
-                }
-
-                // Initiate countersign via ЭДО operator
-                EdoCounterSignResult counterSignResult = edoOperatorClient.initiateCounterSign(
-                        signature.getEdoMessageId(),
-                        signature.getEdoEntityId(),
-                        edoClientBoxId
-                );
-
-                // Update operator fields
-                signature.setEdoDocumentStatus(counterSignResult.status());
-                signature.setEdoClientBoxId(edoClientBoxId);
-                signature.setEdoClientCertThumbprint(counterSignResult.recipientCertThumbprint());
-                signature.setEdoLastSyncedAtUtc(Instant.now());
-                signature.setEdoRawResponse(counterSignResult.rawResponse());
-
-                CampaignSignatureAuditService.EdoEvidenceData edoEvidence =
-                        new CampaignSignatureAuditService.EdoEvidenceData(
-                                signature.getEdoOperator(),
-                                signature.getEdoMessageId(),
-                                signature.getEdoEntityId(),
-                                counterSignResult.status(),
-                                counterSignResult.recipientCertThumbprint()
-                        );
-
+                // Record client signature
                 signature.setClientId(client.getId());
-                campaignSignatureAuditService.recordEdoCounterSignInitiated(
-                        signature,
-                        SignatureActorType.CLIENT,
-                        client.getId(),
-                        client.getName(),
-                        CampaignSignaturePolicy.CLIENT_CONSENT_STATEMENT,
-                        edoEvidence
-                );
+                signature.setClientSignedAtUtc(Instant.now());
+                signature.setFullySigned(true);
+                signature.setFullySignedAtUtc(Instant.now());
+
                 campaign.setSignature(campaignSignatureRepository.save(signature));
+                campaign.transitionTo(CampaignStatus.WAITING_START);
                 break;
             case RESUME:
                 validateResumeAllowed(campaign);
@@ -271,27 +208,6 @@ public class ClientService {
         if (documentHash != null && !documentHash.isBlank() && !signature.getDocumentHash().equals(documentHash)) {
             throw new RuntimeException("Document hash confirmation mismatch");
         }
-    }
-
-    @Transactional(readOnly = true)
-    public byte[] getFrozenDocumentPdf(String apiKey, Long campaignId) {
-        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
-        validateAccessOrThrow(apiKey, campaign);
-
-        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
-                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
-
-        return campaignDocumentPdfService.generateFrozenDocumentPdf(signature);
-    }
-
-    @Transactional
-    public CampaignSignature getSignatureWithArtifactSync(String apiKey, Long campaignId) {
-        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
-        validateAccessOrThrow(apiKey, campaign);
-        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
-                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
-        campaignEdoSyncService.trySync(campaign, signature);
-        return signature;
     }
 
     private void rejectSignedTermChanges(AdvertisingCampaign campaign, ClientActionRequest request) {
