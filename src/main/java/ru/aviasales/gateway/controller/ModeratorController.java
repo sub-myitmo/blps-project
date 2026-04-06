@@ -2,6 +2,9 @@ package ru.aviasales.gateway.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.aviasales.dal.model.CampaignStatus;
@@ -41,5 +44,16 @@ public class ModeratorController {
     @GetMapping("/{id}/signature")
     public ResponseEntity<CampaignSignatureDetailsResponse> getCampaignSignature(@PathVariable Long id) {
         return ResponseEntity.ok(moderatorService.getCampaignSignature(id));
+    }
+
+    @GetMapping("/{id}/signature/pdf")
+    public ResponseEntity<byte[]> getCampaignSignaturePdf(@PathVariable Long id) {
+        byte[] pdf = moderatorService.getCampaignSignaturePdf(id);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("campaign-" + id + "-signing-document.pdf")
+                .build());
+        return ResponseEntity.ok().headers(headers).body(pdf);
     }
 }

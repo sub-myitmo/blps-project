@@ -23,17 +23,20 @@ public class ModeratorService {
     private final AdvertisingCampaignRepository campaignRepository;
     private final CommentRepository commentRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
+    private final CampaignDocumentPdfService campaignDocumentPdfService;
 
     public ModeratorService(
             ModeratorRepository moderatorRepository,
             AdvertisingCampaignRepository campaignRepository,
             CommentRepository commentRepository,
-            CampaignSignatureRepository campaignSignatureRepository
+            CampaignSignatureRepository campaignSignatureRepository,
+            CampaignDocumentPdfService campaignDocumentPdfService
     ) {
         this.moderatorRepository = moderatorRepository;
         this.campaignRepository = campaignRepository;
         this.commentRepository = commentRepository;
         this.campaignSignatureRepository = campaignSignatureRepository;
+        this.campaignDocumentPdfService = campaignDocumentPdfService;
     }
 
     @Transactional
@@ -111,6 +114,14 @@ public class ModeratorService {
         CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
                 .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
         return CampaignSignatureDetailsResponse.fromEntity(signature);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] getCampaignSignaturePdf(Long id) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(id);
+        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+        return campaignDocumentPdfService.generatePdf(signature);
     }
 
     public List<CampaignResponse> getCampaignsByStatus(CampaignStatus status) {

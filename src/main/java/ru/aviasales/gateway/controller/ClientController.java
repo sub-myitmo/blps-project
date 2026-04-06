@@ -3,6 +3,9 @@ package ru.aviasales.gateway.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.aviasales.service.dto.*;
@@ -62,5 +65,18 @@ public class ClientController {
             @RequestHeader("Authorization") String apiKey,
             @PathVariable Long id) {
         return ResponseEntity.ok(clientService.getCampaignSignature(apiKey, id));
+    }
+
+    @GetMapping("/{id}/signature/pdf")
+    public ResponseEntity<byte[]> getCampaignSignaturePdf(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long id) {
+        byte[] pdf = clientService.getCampaignSignaturePdf(apiKey, id);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("campaign-" + id + "-signing-document.pdf")
+                .build());
+        return ResponseEntity.ok().headers(headers).body(pdf);
     }
 }

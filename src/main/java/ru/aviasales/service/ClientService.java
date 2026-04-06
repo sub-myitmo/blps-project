@@ -21,15 +21,18 @@ public class ClientService {
     private final ClientRepository clientRepository;
     private final AdvertisingCampaignRepository campaignRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
+    private final CampaignDocumentPdfService campaignDocumentPdfService;
 
     public ClientService(
             ClientRepository clientRepository,
             AdvertisingCampaignRepository campaignRepository,
-            CampaignSignatureRepository campaignSignatureRepository
+            CampaignSignatureRepository campaignSignatureRepository,
+            CampaignDocumentPdfService campaignDocumentPdfService
     ) {
         this.clientRepository = clientRepository;
         this.campaignRepository = campaignRepository;
         this.campaignSignatureRepository = campaignSignatureRepository;
+        this.campaignDocumentPdfService = campaignDocumentPdfService;
     }
 
     @Transactional
@@ -98,6 +101,17 @@ public class ClientService {
                 .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
 
         return CampaignSignatureDetailsResponse.fromEntity(signature);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] getCampaignSignaturePdf(String apiKey, Long campaignId) {
+        AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
+        validateAccessOrThrow(apiKey, campaign);
+
+        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+
+        return campaignDocumentPdfService.generatePdf(signature);
     }
 
     @Transactional
