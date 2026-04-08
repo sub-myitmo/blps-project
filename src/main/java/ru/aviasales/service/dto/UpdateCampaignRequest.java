@@ -2,6 +2,7 @@ package ru.aviasales.service.dto;
 
 import jakarta.validation.constraints.*;
 import lombok.Data;
+import org.hibernate.validator.constraints.URL;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -15,7 +16,7 @@ public class UpdateCampaignRequest {
     @Size(max = 2000, message = "Контент не может превышать 2000 символов")
     private String content;
 
-    @Pattern(regexp = "^(http|https)://.*$", message = "Некорректный URL")
+    @URL(message = "Некорректный URL: должен быть валидным http/https адресом")
     private String targetUrl;
 
     @DecimalMin(value = "0.01", message = "Дневной бюджет должен быть больше 0")

@@ -2,6 +2,8 @@ package ru.aviasales.service.dto;
 
 import jakarta.validation.constraints.*;
 import lombok.Data;
+import org.hibernate.validator.constraints.URL;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -17,7 +19,7 @@ public class CampaignRequest {
     private String content;
 
     @NotBlank(message = "URL назначения обязателен")
-    @Pattern(regexp = "^(http|https)://.*$", message = "Некорректный URL")
+    @URL(message = "Некорректный URL: должен быть валидным http/https адресом")
     private String targetUrl;
 
     @NotNull(message = "Дневной бюджет обязателен")

@@ -1,0 +1,40 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy project to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 46.8.225.64
+          port: 2222
+          username: virxdxk
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "."
+          target: "~/blps-project"
+          rm: false
+          exclude: ".git,target,*.class"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 46.8.225.64
+          port: 2222
+          username: virxdxk
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/blps-project
+            docker compose down --remove-orphans
+            docker compose up -d --build
+            sleep 5
+            docker compose ps
