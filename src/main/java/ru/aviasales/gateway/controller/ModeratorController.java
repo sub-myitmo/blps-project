@@ -11,6 +11,7 @@ import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ModeratorActionRequest;
+import ru.aviasales.service.dto.UpdateCampaignRequest;
 import ru.aviasales.service.ModeratorService;
 
 import java.util.List;
@@ -39,6 +40,30 @@ public class ModeratorController {
             @Valid @RequestBody ModeratorActionRequest request) {
         CampaignResponse response = moderatorService.actionCampaign(apiKey, id, request);
         return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<CampaignResponse> updateCampaign(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateCampaignRequest request) {
+        return ResponseEntity.ok(moderatorService.updateCampaign(apiKey, id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCampaign(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long id) {
+        moderatorService.deleteCampaign(apiKey, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/comments/{commentId}")
+    public ResponseEntity<Void> deleteComment(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long commentId) {
+        moderatorService.deleteComment(apiKey, commentId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/signature")

@@ -1,7 +1,9 @@
 package ru.aviasales.service;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import ru.aviasales.dal.model.*;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.CampaignSignatureRepository;
@@ -11,8 +13,10 @@ import ru.aviasales.service.doc.*;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
 import ru.aviasales.service.dto.ModeratorActionRequest;
+import ru.aviasales.service.dto.UpdateCampaignRequest;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -42,15 +46,15 @@ public class ModeratorService {
     @Transactional
     public CampaignResponse actionCampaign(String apiKey, Long campaignId,
                                              ModeratorActionRequest request) {
-        Moderator moderator = moderatorRepository.findByApiKey(apiKey)
-                .orElseThrow(() -> new RuntimeException("Moderator not found"));
+        Moderator moderator = getModeratorOrThrow(apiKey);
 
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
 
         switch (request.getAction()) {
             case SIGN_DOC:
                 if (campaign.getStatus() != CampaignStatus.PENDING) {
-                    throw new RuntimeException("Campaign must be in PENDING status for moderator signing");
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Campaign must be in PENDING status for moderator signing");
                 }
                 validateConsentAccepted(request.getConsentAccepted());
 
@@ -61,7 +65,6 @@ public class ModeratorService {
                             return newSignature;
                         });
 
-                // Build and freeze document
                 String documentSnapshot = CampaignSigningDocumentFactory.buildSnapshot(campaign);
                 String documentHash = CampaignDocumentHashUtil.buildDocumentHash(documentSnapshot);
                 signature.setDocumentHash(documentHash);
@@ -69,7 +72,6 @@ public class ModeratorService {
                 signature.setDocumentTemplateVersion(CampaignSigningDocumentFactory.TEMPLATE_VERSION);
                 signature.setDocumentSnapshot(documentSnapshot);
 
-                // Record moderator signature
                 signature.setModeratorId(moderator.getId());
                 signature.setModeratorSignedAtUtc(Instant.now());
 
@@ -102,6 +104,53 @@ public class ModeratorService {
         return CampaignResponse.fromEntity(campaignRepository.save(campaign));
     }
 
+    @Transactional
+    public CampaignResponse updateCampaign(String apiKey, Long campaignId, UpdateCampaignRequest request) {
+        getModeratorOrThrow(apiKey);
+        AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
+
+        LocalDate startDate = request.getStartDate() == null ? campaign.getStartDate() : request.getStartDate();
+        LocalDate endDate = request.getEndDate() == null ? campaign.getEndDate() : request.getEndDate();
+
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new RuntimeException("Start date must be before end date");
+        }
+
+        campaign.setName(request.getName() == null ? campaign.getName() : request.getName());
+        campaign.setContent(request.getContent() == null ? campaign.getContent() : request.getContent());
+        campaign.setTargetUrl(request.getTargetUrl() == null ? campaign.getTargetUrl() : request.getTargetUrl());
+        campaign.setDailyBudget(request.getDailyBudget() == null ? campaign.getDailyBudget() : request.getDailyBudget());
+        campaign.setStartDate(startDate);
+        campaign.setEndDate(endDate);
+
+        return CampaignResponse.fromEntity(campaignRepository.save(campaign));
+    }
+
+    @Transactional
+    public void deleteCampaign(String apiKey, Long campaignId) {
+        getModeratorOrThrow(apiKey);
+        AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
+
+        if (campaign.getStatus() == CampaignStatus.COMPLETED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot delete a completed campaign");
+        }
+
+        campaignRepository.delete(campaign);
+    }
+
+    @Transactional
+    public void deleteComment(String apiKey, Long commentId) {
+        Moderator moderator = getModeratorOrThrow(apiKey);
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comment not found"));
+
+        if (!comment.getModerator().getId().equals(moderator.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot delete another moderator's comment");
+        }
+
+        commentRepository.delete(comment);
+    }
+
     @Transactional(readOnly = true)
     public CampaignResponse getCampaign(Long id) {
         AdvertisingCampaign campaign = getCampaignOrThrow(id);
@@ -112,7 +161,7 @@ public class ModeratorService {
     public CampaignSignatureDetailsResponse getCampaignSignature(Long id) {
         AdvertisingCampaign campaign = getCampaignOrThrow(id);
         CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
-                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign signature not found"));
         return CampaignSignatureDetailsResponse.fromEntity(signature);
     }
 
@@ -120,26 +169,30 @@ public class ModeratorService {
     public byte[] getCampaignSignaturePdf(Long id) {
         AdvertisingCampaign campaign = getCampaignOrThrow(id);
         CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
-                .orElseThrow(() -> new RuntimeException("Campaign signature not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign signature not found"));
         return campaignDocumentPdfService.generatePdf(signature);
     }
 
     public List<CampaignResponse> getCampaignsByStatus(CampaignStatus status) {
-        List<AdvertisingCampaign> campaigns = campaignRepository
-                .findByStatus(status);
+        List<AdvertisingCampaign> campaigns = campaignRepository.findByStatus(status);
         return campaigns.stream()
                 .map(CampaignResponse::fromEntity)
                 .collect(Collectors.toList());
     }
 
+    private Moderator getModeratorOrThrow(String apiKey) {
+        return moderatorRepository.findByApiKey(apiKey)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Moderator not found"));
+    }
+
     private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
         return campaignRepository.findById(campaignId)
-                .orElseThrow(() -> new RuntimeException("Campaign not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign not found"));
     }
 
     private AdvertisingCampaign getCampaignForActionOrThrow(Long campaignId) {
         return campaignRepository.findByIdForUpdate(campaignId)
-                .orElseThrow(() -> new RuntimeException("Campaign not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign not found"));
     }
 
     private void validateConsentAccepted(Boolean consentAccepted) {

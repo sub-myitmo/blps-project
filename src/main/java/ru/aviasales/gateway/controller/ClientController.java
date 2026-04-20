@@ -43,6 +43,14 @@ public class ClientController {
         return ResponseEntity.ok(response);
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCampaign(
+            @RequestHeader("Authorization") String apiKey,
+            @PathVariable Long id) {
+        clientService.deleteCampaign(apiKey, id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}")
     public ResponseEntity<CampaignResponse> actionWithCampaign(
             @RequestHeader("Authorization") String apiKey,
