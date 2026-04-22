@@ -21,8 +21,8 @@ public interface AdvertisingCampaignRepository extends JpaRepository<Advertising
             "JOIN FETCH c.client " +
             "LEFT JOIN FETCH c.comments " +
             "LEFT JOIN FETCH c.signature " +
-            "WHERE c.client.apiKey = :apiKey")
-    List<AdvertisingCampaign> findByClientIdWithDetails(@Param("apiKey") String apiKey);
+            "WHERE c.client.id = :clientId")
+    List<AdvertisingCampaign> findByClientIdWithDetails(@Param("clientId") Long clientId);
 
     @Query("SELECT DISTINCT c FROM AdvertisingCampaign c " +
             "JOIN FETCH c.client " +
@@ -30,6 +30,12 @@ public interface AdvertisingCampaignRepository extends JpaRepository<Advertising
             "LEFT JOIN FETCH c.signature " +
             "WHERE c.status = :status")
     List<AdvertisingCampaign> findByStatusWithDetails(@Param("status") CampaignStatus status);
+
+    @Query("SELECT DISTINCT c FROM AdvertisingCampaign c " +
+            "JOIN FETCH c.client " +
+            "LEFT JOIN FETCH c.comments " +
+            "LEFT JOIN FETCH c.signature")
+    List<AdvertisingCampaign> findAllWithDetails();
 
     @Query("SELECT c FROM AdvertisingCampaign c " +
             "JOIN FETCH c.client " +

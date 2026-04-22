@@ -29,7 +29,11 @@ public enum CampaignStatus {
                     COMPLETED,
                     FROZEN
             );
-            case PAUSED_BY_CLIENT, PAUSED_BY_MODERATOR, FROZEN, AT_SIGNING -> List.of(
+            case PAUSED_BY_CLIENT, PAUSED_BY_MODERATOR, FROZEN -> List.of(
+                    WAITING_START,
+                    AT_SIGNING
+            );
+            case AT_SIGNING -> List.of(
                     WAITING_START
             );
             case COMPLETED -> List.of();

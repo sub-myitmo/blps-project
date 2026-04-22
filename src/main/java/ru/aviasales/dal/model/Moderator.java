@@ -21,10 +21,13 @@ public class Moderator {
     private String name;
 
     @Column(nullable = false, unique = true)
-    private String apiKey; // Для авторизации через заголовок
+    private String apiKey; // Legacy key used only for seeded JWT accounts
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @PrePersist
     protected void onCreate() {

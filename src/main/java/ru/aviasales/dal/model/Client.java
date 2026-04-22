@@ -24,13 +24,16 @@ public class Client {
     private String name;
 
     @Column(nullable = false, unique = true)
-    private String apiKey; // Для авторизации через заголовок
+    private String apiKey; // Legacy key used only for seeded JWT accounts
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal balance = BigDecimal.ZERO;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @OneToMany(mappedBy = "client", cascade = CascadeType.ALL)
     private List<AdvertisingCampaign> campaigns = new ArrayList<>();

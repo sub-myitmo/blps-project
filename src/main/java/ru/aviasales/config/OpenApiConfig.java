@@ -20,13 +20,13 @@ public class OpenApiConfig {
                         .title("Advertising System API")
                         .description("Advertising Management System")
                         .version("1.0.0"))
-                .addSecurityItem(new SecurityRequirement().addList("ApiKey"))
+                .addSecurityItem(new SecurityRequirement().addList("BearerAuth"))
                 .components(new Components()
-                        .addSecuritySchemes("ApiKey",
+                        .addSecuritySchemes("BearerAuth",
                                 new SecurityScheme()
-                                        .type(SecurityScheme.Type.APIKEY)
-                                        .in(SecurityScheme.In.HEADER)
-                                        .name("Authorization")));
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")));
     }
 
     @Bean

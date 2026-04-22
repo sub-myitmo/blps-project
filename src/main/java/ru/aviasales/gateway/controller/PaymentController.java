@@ -3,7 +3,9 @@ package ru.aviasales.gateway.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import ru.aviasales.security.UserPrincipal;
 import ru.aviasales.service.dto.PaymentRequest;
 import ru.aviasales.service.PaymentService;
 
@@ -20,9 +22,9 @@ public class PaymentController {
 
     @PostMapping("/pay")
     public ResponseEntity<Map<String, Object>> deposit(
-            @RequestHeader("Authorization") String apiKey,
+            @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PaymentRequest request) {
-        BigDecimal newBalance = paymentService.deposit(apiKey, request);
+        BigDecimal newBalance = paymentService.deposit(principal.getClientId(), request);
 
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Payment successful");
@@ -34,8 +36,8 @@ public class PaymentController {
 
     @GetMapping("/balance")
     public ResponseEntity<Map<String, Object>> getBalance(
-            @RequestHeader("Authorization") String apiKey) {
-        BigDecimal balance = paymentService.getBalance(apiKey);
+            @AuthenticationPrincipal UserPrincipal principal) {
+        BigDecimal balance = paymentService.getBalance(principal.getClientId());
 
         Map<String, Object> response = new HashMap<>();
         response.put("balance", balance);

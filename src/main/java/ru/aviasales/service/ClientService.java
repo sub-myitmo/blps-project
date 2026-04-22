@@ -23,32 +23,35 @@ public class ClientService {
     private final ClientRepository clientRepository;
     private final AdvertisingCampaignRepository campaignRepository;
     private final CampaignSignatureRepository campaignSignatureRepository;
-    private final CampaignDocumentPdfService campaignDocumentPdfService;
+    private final CampaignSigningSagaService campaignSigningSagaService;
+    private final PdfStorageService pdfStorageService;
 
     public ClientService(
             ClientRepository clientRepository,
             AdvertisingCampaignRepository campaignRepository,
             CampaignSignatureRepository campaignSignatureRepository,
-            CampaignDocumentPdfService campaignDocumentPdfService
+            CampaignSigningSagaService campaignSigningSagaService,
+            PdfStorageService pdfStorageService
     ) {
         this.clientRepository = clientRepository;
         this.campaignRepository = campaignRepository;
         this.campaignSignatureRepository = campaignSignatureRepository;
-        this.campaignDocumentPdfService = campaignDocumentPdfService;
+        this.campaignSigningSagaService = campaignSigningSagaService;
+        this.pdfStorageService = pdfStorageService;
     }
 
     @Transactional
-    public List<CampaignResponse> getCampaignsByClient(String apiKey) {
+    public List<CampaignResponse> getCampaignsByClient(Long clientId) {
         List<AdvertisingCampaign> campaigns = campaignRepository
-                .findByClientIdWithDetails(apiKey);
+                .findByClientIdWithDetails(clientId);
         return campaigns.stream()
                 .map(CampaignResponse::fromEntity)
                 .collect(Collectors.toList());
     }
 
     @Transactional
-    public CampaignResponse createCampaign(String apiKey, CampaignRequest request) {
-        Client client = clientRepository.findByApiKey(apiKey)
+    public CampaignResponse createCampaign(Long clientId, CampaignRequest request) {
+        Client client = clientRepository.findActiveById(clientId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Client not found"));
         validateDates(request.getStartDate(), request.getEndDate());
 
@@ -67,49 +70,53 @@ public class ClientService {
     }
 
     @Transactional
-    public CampaignResponse updateCampaign(String apiKey, Long campaignId, UpdateCampaignRequest request) {
+    public CampaignResponse updateCampaign(Long clientId, Long campaignId, UpdateCampaignRequest request) {
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
-        validateAccessOrThrow(apiKey, campaign);
+        validateAccessOrThrow(clientId, campaign);
+        validateUpdateAllowed(campaign);
+        CampaignStatus previousStatus = campaign.getStatus();
 
-        if (campaign.getStatus() == CampaignStatus.REJECTED) {
-            LocalDate startDate = request.getStartDate() == null ? campaign.getStartDate() : request.getStartDate();
-            LocalDate endDate = request.getEndDate() == null ? campaign.getEndDate() : request.getEndDate();
-
-            validateDates(startDate, endDate);
-        
-            campaign.setDailyBudget(request.getDailyBudget() == null ? campaign.getDailyBudget() : request.getDailyBudget());
-            campaign.setStartDate(startDate);
-            campaign.setEndDate(endDate);
-            campaign.transitionTo(CampaignStatus.PENDING);
-        }
+        LocalDate startDate = request.getStartDate() == null ? campaign.getStartDate() : request.getStartDate();
+        LocalDate endDate = request.getEndDate() == null ? campaign.getEndDate() : request.getEndDate();
+        validateUpdateDates(request.getStartDate(), startDate, endDate);
 
         campaign.setName(request.getName() == null ? campaign.getName() : request.getName());
         campaign.setContent(request.getContent() == null ? campaign.getContent() : request.getContent());
         campaign.setTargetUrl(request.getTargetUrl() == null ? campaign.getTargetUrl() : request.getTargetUrl());
+        campaign.setDailyBudget(request.getDailyBudget() == null ? campaign.getDailyBudget() : request.getDailyBudget());
+        campaign.setStartDate(startDate);
+        campaign.setEndDate(endDate);
+
+        if (previousStatus == CampaignStatus.REJECTED) {
+            campaign.transitionTo(CampaignStatus.PENDING);
+        } else {
+            campaign.transitionTo(CampaignStatus.AT_SIGNING);
+            campaignSigningSagaService.restartSigning(campaign, null);
+        }
 
         AdvertisingCampaign saved = campaignRepository.save(campaign);
         return CampaignResponse.fromEntity(saved);
     }
 
     @Transactional
-    public void deleteCampaign(String apiKey, Long campaignId) {
+    public void deleteCampaign(Long clientId, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
-        validateAccessOrThrow(apiKey, campaign);
+        validateAccessOrThrow(clientId, campaign);
 
         campaignRepository.delete(campaign);
     }
 
     @Transactional(readOnly = true)
-    public CampaignResponse getCampaign(String apiKey, Long campaignId) {
+    public CampaignResponse getCampaign(Long clientId, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
-        validateAccessOrThrow(apiKey, campaign);
+        validateAccessOrThrow(clientId, campaign);
         return CampaignResponse.fromEntity(campaign);
     }
 
     @Transactional(readOnly = true)
-    public CampaignSignatureDetailsResponse getCampaignSignature(String apiKey, Long campaignId) {
+    public CampaignSignatureDetailsResponse getCampaignSignature(Long clientId, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
-        validateAccessOrThrow(apiKey, campaign);
+        validateAccessOrThrow(clientId, campaign);
 
         CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign signature not found"));
@@ -117,22 +124,23 @@ public class ClientService {
         return CampaignSignatureDetailsResponse.fromEntity(signature);
     }
 
-    @Transactional(readOnly = true)
-    public byte[] getCampaignSignaturePdf(String apiKey, Long campaignId) {
+    @Transactional
+    public String getCampaignSignaturePdfUrl(Long clientId, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
-        validateAccessOrThrow(apiKey, campaign);
+        validateAccessOrThrow(clientId, campaign);
 
         CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign signature not found"));
 
-        return campaignDocumentPdfService.generatePdf(signature);
+        signature = campaignSigningSagaService.ensurePdfStored(signature);
+        return pdfStorageService.buildPresignedUrl(signature.getPdfObjectKey());
     }
 
     @Transactional
-    public CampaignResponse actionCampaign(String apiKey, Long campaignId,
+    public CampaignResponse actionCampaign(Long clientId, Long campaignId,
                                            ClientActionRequest request) {
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
-        Client client = validateAccessOrThrow(apiKey, campaign);
+        Client client = validateAccessOrThrow(clientId, campaign);
 
         switch (request.getAction()) {
             case SIGN_DOC:
@@ -144,7 +152,7 @@ public class ClientService {
 
                 CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                                "Campaign is not signed by moderator"));
+                                "Campaign signature not found"));
 
                 requireDocumentHash(signature, request.getDocumentHash());
 
@@ -158,7 +166,8 @@ public class ClientService {
                 signature.setFullySigned(true);
                 signature.setFullySignedAtUtc(Instant.now());
 
-                campaign.setSignature(campaignSignatureRepository.save(signature));
+                signature = campaignSigningSagaService.regeneratePdf(signature);
+                campaign.setSignature(signature);
                 campaign.transitionTo(CampaignStatus.WAITING_START);
                 break;
             case RESUME:
@@ -184,24 +193,24 @@ public class ClientService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign not found"));
     }
 
-    private Client getClientOrThrow(String apiKey) {
-        return clientRepository.findByApiKey(apiKey)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Client not found"));
-    }
-
     private AdvertisingCampaign getCampaignForActionOrThrow(Long campaignId) {
         return campaignRepository.findByIdForUpdate(campaignId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign not found"));
     }
 
-    private Client validateAccessOrThrow(String apiKey, AdvertisingCampaign campaign) {
-        Client client = getClientOrThrow(apiKey);
+    private Client validateAccessOrThrow(Long clientId, AdvertisingCampaign campaign) {
+        Client client = getClientOrThrow(clientId);
 
         if (!campaign.getClient().getId().equals(client.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 
         return client;
+    }
+
+    private Client getClientOrThrow(Long clientId) {
+        return clientRepository.findActiveById(clientId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Client not found"));
     }
 
     private void validateDates(LocalDate startDate, LocalDate endDate) {
@@ -215,6 +224,28 @@ public class ClientService {
             if (startDate.isAfter(endDate)) {
                 throw new RuntimeException("Start date must be before end date");
             }
+        }
+    }
+
+    private void validateUpdateAllowed(AdvertisingCampaign campaign) {
+        if (campaign.getStatus() != CampaignStatus.FROZEN
+                && campaign.getStatus() != CampaignStatus.PAUSED_BY_CLIENT
+                && campaign.getStatus() != CampaignStatus.PAUSED_BY_MODERATOR
+                && campaign.getStatus() != CampaignStatus.REJECTED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Campaign can be updated only in FROZEN, PAUSED_BY_CLIENT, PAUSED_BY_MODERATOR or REJECTED status");
+        }
+    }
+
+    private void validateUpdateDates(LocalDate requestedStartDate, LocalDate startDate, LocalDate endDate) {
+        if (startDate == null) {
+            throw new RuntimeException("Start date must be not null");
+        }
+        if (requestedStartDate != null && requestedStartDate.isBefore(LocalDate.now())) {
+            throw new RuntimeException("Start date cannot be in the past");
+        }
+        if (endDate != null && startDate.isAfter(endDate)) {
+            throw new RuntimeException("Start date must be before end date");
         }
     }
 

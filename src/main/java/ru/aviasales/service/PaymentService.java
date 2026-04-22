@@ -1,8 +1,10 @@
 package ru.aviasales.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import ru.aviasales.service.dto.PaymentRequest;
 import ru.aviasales.dal.model.Client;
 import ru.aviasales.dal.model.Transaction;
@@ -19,9 +21,9 @@ public class PaymentService {
     private final TransactionRepository transactionRepository;
 
     @Transactional
-    public BigDecimal deposit(String apiKey, PaymentRequest request) {
-        Client client = clientRepository.findByApiKey(apiKey)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
+    public BigDecimal deposit(Long clientId, PaymentRequest request) {
+        Client client = clientRepository.findActiveById(clientId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Client not found"));
 
         client.setBalance(client.getBalance().add(request.getAmount()));
         clientRepository.save(client);
@@ -37,9 +39,9 @@ public class PaymentService {
     }
 
     @Transactional
-    public BigDecimal getBalance(String apiKey) {
-        Client client = clientRepository.findByApiKey(apiKey)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
+    public BigDecimal getBalance(Long clientId) {
+        Client client = clientRepository.findActiveById(clientId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Client not found"));
         return client.getBalance();
     }
 }

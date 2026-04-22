@@ -52,4 +52,17 @@ public class CampaignSignature {
 
     @Column(name = "fully_signed_at_utc")
     private Instant fullySignedAtUtc;
+
+    @Column(name = "pdf_object_key", length = 512)
+    private String pdfObjectKey;
+
+    @Column(name = "pdf_content_type", length = 128)
+    private String pdfContentType;
+
+    @Column(name = "pdf_created_at_utc")
+    private Instant pdfCreatedAtUtc;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pdf_status", nullable = false, length = 50)
+    private PdfStatus pdfStatus = PdfStatus.NOT_CREATED;
 }

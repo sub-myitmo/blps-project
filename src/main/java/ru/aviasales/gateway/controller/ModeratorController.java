@@ -2,26 +2,32 @@ package ru.aviasales.gateway.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import ru.aviasales.dal.model.CampaignStatus;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
+import ru.aviasales.service.dto.CommentRequest;
 import ru.aviasales.service.dto.ModeratorActionRequest;
-import ru.aviasales.service.dto.UpdateCampaignRequest;
 import ru.aviasales.service.ModeratorService;
+import ru.aviasales.security.UserPrincipal;
 
+import java.net.URI;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/moderator/campaigns")
+@RequestMapping({"/api/manager/campaigns", "/api/moderator/campaigns"})
 @RequiredArgsConstructor
 public class ModeratorController {
 
     private final ModeratorService moderatorService;
+
+    @GetMapping("")
+    public ResponseEntity<List<CampaignResponse>> getAllCampaigns() {
+        return ResponseEntity.ok(moderatorService.getAllCampaigns());
+    }
 
     @GetMapping("/status/{status}")
     public ResponseEntity<List<CampaignResponse>> getCampaignsByStatus(@PathVariable CampaignStatus status) {
@@ -35,34 +41,33 @@ public class ModeratorController {
 
     @PostMapping("/{id}")
     public ResponseEntity<CampaignResponse> actionWithCampaign(
-            @RequestHeader("Authorization") String apiKey,
+            @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long id,
             @Valid @RequestBody ModeratorActionRequest request) {
-        CampaignResponse response = moderatorService.actionCampaign(apiKey, id, request);
+        CampaignResponse response = moderatorService.actionCampaign(principal, id, request);
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<CampaignResponse> updateCampaign(
-            @RequestHeader("Authorization") String apiKey,
+    @PostMapping("/{id}/comments")
+    public ResponseEntity<CampaignResponse> addComment(
+            @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long id,
-            @Valid @RequestBody UpdateCampaignRequest request) {
-        return ResponseEntity.ok(moderatorService.updateCampaign(apiKey, id, request));
+            @Valid @RequestBody CommentRequest request) {
+        return ResponseEntity.ok(moderatorService.addComment(principal, id, request));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCampaign(
-            @RequestHeader("Authorization") String apiKey,
             @PathVariable Long id) {
-        moderatorService.deleteCampaign(apiKey, id);
+        moderatorService.deleteCampaign(id);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/comments/{commentId}")
     public ResponseEntity<Void> deleteComment(
-            @RequestHeader("Authorization") String apiKey,
+            @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long commentId) {
-        moderatorService.deleteComment(apiKey, commentId);
+        moderatorService.deleteComment(principal, commentId);
         return ResponseEntity.noContent().build();
     }
 
@@ -72,13 +77,10 @@ public class ModeratorController {
     }
 
     @GetMapping("/{id}/signature/pdf")
-    public ResponseEntity<byte[]> getCampaignSignaturePdf(@PathVariable Long id) {
-        byte[] pdf = moderatorService.getCampaignSignaturePdf(id);
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_PDF);
-        headers.setContentDisposition(ContentDisposition.attachment()
-                .filename("campaign-" + id + "-signing-document.pdf")
-                .build());
-        return ResponseEntity.ok().headers(headers).body(pdf);
+    public ResponseEntity<Void> getCampaignSignaturePdf(@PathVariable Long id) {
+        String pdfUrl = moderatorService.getCampaignSignaturePdfUrl(id);
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create(pdfUrl))
+                .build();
     }
 }

@@ -2,6 +2,7 @@ package ru.aviasales.service.dto;
 
 import lombok.Data;
 import ru.aviasales.dal.model.CampaignSignature;
+import ru.aviasales.dal.model.PdfStatus;
 
 import java.time.Instant;
 
@@ -18,6 +19,10 @@ public class CampaignSignatureDetailsResponse {
     private Instant clientSignedAtUtc;
     private boolean fullySigned;
     private Instant fullySignedAtUtc;
+    private String pdfObjectKey;
+    private String pdfContentType;
+    private Instant pdfCreatedAtUtc;
+    private PdfStatus pdfStatus;
 
     public static CampaignSignatureDetailsResponse fromEntity(CampaignSignature signature) {
         CampaignSignatureDetailsResponse response = new CampaignSignatureDetailsResponse();
@@ -32,6 +37,10 @@ public class CampaignSignatureDetailsResponse {
         response.setClientSignedAtUtc(signature.getClientSignedAtUtc());
         response.setFullySigned(signature.isFullySigned());
         response.setFullySignedAtUtc(signature.getFullySignedAtUtc());
+        response.setPdfObjectKey(signature.getPdfObjectKey());
+        response.setPdfContentType(signature.getPdfContentType());
+        response.setPdfCreatedAtUtc(signature.getPdfCreatedAtUtc());
+        response.setPdfStatus(signature.getPdfStatus());
         return response;
     }
 }
