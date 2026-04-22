@@ -43,14 +43,14 @@ public class AdvertisingCampaign {
     @Column(nullable = false)
     private CampaignStatus status = CampaignStatus.PENDING;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
     private Client client;
 
-    @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Comment> comments = new ArrayList<>();
 
-    @OneToOne(mappedBy = "campaign", cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "campaign", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private CampaignSignature signature;
 
     @PrePersist

@@ -27,7 +27,7 @@ public class PaymentService {
         clientRepository.save(client);
 
         Transaction transaction = new Transaction();
-        transaction.setClient(client);
+        transaction.setClientId(client.getId());
         transaction.setAmount(request.getAmount());
         transaction.setType(Transaction.TransactionType.DEPOSIT);
         transaction.setDescription(request.getDescription());

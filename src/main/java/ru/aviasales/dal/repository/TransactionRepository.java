@@ -4,7 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-import ru.aviasales.dal.model.Client;
 import ru.aviasales.dal.model.Transaction;
 
 import java.math.BigDecimal;
@@ -14,15 +13,15 @@ import java.util.List;
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
 
-    List<Transaction> findByClient(Client client);
+    List<Transaction> findByClientId(Long clientId);
 
     @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t " +
-            "WHERE t.client = :client AND t.type = 'DEPOSIT'")
-    BigDecimal getTotalDeposits(@Param("client") Client client);
+            "WHERE t.clientId = :clientId AND t.type = 'DEPOSIT'")
+    BigDecimal getTotalDeposits(@Param("clientId") Long clientId);
 
     @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t " +
-            "WHERE t.client = :client AND t.type = 'DAILY_DEBIT' " +
+            "WHERE t.clientId = :clientId AND t.type = 'DAILY_DEBIT' " +
             "AND t.createdAt >= :startOfDay")
-    BigDecimal getTodaySpent(@Param("client") Client client,
+    BigDecimal getTodaySpent(@Param("clientId") Long clientId,
                              @Param("startOfDay") LocalDateTime startOfDay);
 }

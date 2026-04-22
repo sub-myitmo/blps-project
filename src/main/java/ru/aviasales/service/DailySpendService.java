@@ -39,15 +39,15 @@ public class DailySpendService {
         completeExpiredCampaigns(today);
 
         List<AdvertisingCampaign> activeCampaigns = campaignRepository
-                .findByStatus(CampaignStatus.ACTIVE);
+                .findByStatusWithClient(CampaignStatus.ACTIVE);
 
-        // Группируем по клиентам
-        Map<Client, List<AdvertisingCampaign>> campaignsByClient = activeCampaigns.stream()
-                .collect(Collectors.groupingBy(AdvertisingCampaign::getClient));
+        // Группируем по id, чтобы не дергать Lombok hashCode у JPA-сущности Client.
+        Map<Long, List<AdvertisingCampaign>> campaignsByClient = activeCampaigns.stream()
+                .collect(Collectors.groupingBy(campaign -> campaign.getClient().getId()));
 
-        for (Map.Entry<Client, List<AdvertisingCampaign>> entry : campaignsByClient.entrySet()) {
-            Client client = entry.getKey();
+        for (Map.Entry<Long, List<AdvertisingCampaign>> entry : campaignsByClient.entrySet()) {
             List<AdvertisingCampaign> campaigns = entry.getValue();
+            Client client = campaigns.get(0).getClient();
 
             BigDecimal totalToSpend = campaigns.stream()
                     .map(AdvertisingCampaign::getDailyBudget)
@@ -58,7 +58,7 @@ public class DailySpendService {
                 clientRepository.save(client);
 
                 Transaction transaction = new Transaction();
-                transaction.setClient(client);
+                transaction.setClientId(client.getId());
                 transaction.setAmount(totalToSpend.negate());
                 transaction.setType(Transaction.TransactionType.DAILY_DEBIT);
                 transaction.setDescription("Daily spending for " + campaigns.size() + " campaigns");

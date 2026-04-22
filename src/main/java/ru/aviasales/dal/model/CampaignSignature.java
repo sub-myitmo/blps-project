@@ -18,7 +18,7 @@ public class CampaignSignature {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campaign_id", nullable = false, unique = true)
     private AdvertisingCampaign campaign;
 

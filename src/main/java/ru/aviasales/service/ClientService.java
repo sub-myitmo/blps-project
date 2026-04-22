@@ -15,21 +15,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class ClientService {
-
-    private static final Set<CampaignStatus> CANCELABLE_STATUSES = Set.of(
-            CampaignStatus.PENDING,
-            CampaignStatus.REJECTED,
-            CampaignStatus.WAITING_START,
-            CampaignStatus.PAUSED_BY_CLIENT,
-            CampaignStatus.PAUSED_BY_MODERATOR,
-            CampaignStatus.FROZEN,
-            CampaignStatus.AT_SIGNING
-    );
 
     private final ClientRepository clientRepository;
     private final AdvertisingCampaignRepository campaignRepository;
@@ -51,7 +40,7 @@ public class ClientService {
     @Transactional
     public List<CampaignResponse> getCampaignsByClient(String apiKey) {
         List<AdvertisingCampaign> campaigns = campaignRepository
-                .findByClient(getClientOrThrow(apiKey));
+                .findByClientIdWithDetails(apiKey);
         return campaigns.stream()
                 .map(CampaignResponse::fromEntity)
                 .collect(Collectors.toList());
@@ -81,18 +70,22 @@ public class ClientService {
     public CampaignResponse updateCampaign(String apiKey, Long campaignId, UpdateCampaignRequest request) {
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
         validateAccessOrThrow(apiKey, campaign);
-        LocalDate startDate = request.getStartDate() == null ? campaign.getStartDate() : request.getStartDate();
-        LocalDate endDate = request.getEndDate() == null ? campaign.getEndDate() : request.getEndDate();
 
-        validateDates(startDate, endDate);
+        if (campaign.getStatus() == CampaignStatus.REJECTED) {
+            LocalDate startDate = request.getStartDate() == null ? campaign.getStartDate() : request.getStartDate();
+            LocalDate endDate = request.getEndDate() == null ? campaign.getEndDate() : request.getEndDate();
+
+            validateDates(startDate, endDate);
+        
+            campaign.setDailyBudget(request.getDailyBudget() == null ? campaign.getDailyBudget() : request.getDailyBudget());
+            campaign.setStartDate(startDate);
+            campaign.setEndDate(endDate);
+            campaign.transitionTo(CampaignStatus.PENDING);
+        }
 
         campaign.setName(request.getName() == null ? campaign.getName() : request.getName());
         campaign.setContent(request.getContent() == null ? campaign.getContent() : request.getContent());
         campaign.setTargetUrl(request.getTargetUrl() == null ? campaign.getTargetUrl() : request.getTargetUrl());
-        campaign.setDailyBudget(request.getDailyBudget() == null ? campaign.getDailyBudget() : request.getDailyBudget());
-        campaign.setStartDate(startDate);
-        campaign.setEndDate(endDate);
-        campaign.transitionTo(CampaignStatus.PENDING);
 
         AdvertisingCampaign saved = campaignRepository.save(campaign);
         return CampaignResponse.fromEntity(saved);
@@ -102,11 +95,6 @@ public class ClientService {
     public void deleteCampaign(String apiKey, Long campaignId) {
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
         validateAccessOrThrow(apiKey, campaign);
-
-        if (!CANCELABLE_STATUSES.contains(campaign.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Cannot delete campaign in status " + campaign.getStatus() + ". Pause it first.");
-        }
 
         campaignRepository.delete(campaign);
     }
@@ -123,7 +111,7 @@ public class ClientService {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
         validateAccessOrThrow(apiKey, campaign);
 
-        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+        CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign signature not found"));
 
         return CampaignSignatureDetailsResponse.fromEntity(signature);
@@ -134,7 +122,7 @@ public class ClientService {
         AdvertisingCampaign campaign = getCampaignOrThrow(campaignId);
         validateAccessOrThrow(apiKey, campaign);
 
-        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+        CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign signature not found"));
 
         return campaignDocumentPdfService.generatePdf(signature);
@@ -154,19 +142,17 @@ public class ClientService {
                 }
                 validateConsentAccepted(request.getConsentAccepted());
 
-                CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                                 "Campaign is not signed by moderator"));
 
                 requireDocumentHash(signature, request.getDocumentHash());
 
-                // Verify document integrity — catch illegal mutations after freeze
                 String actualHash = CampaignDocumentHashUtil.buildDocumentHash(campaign);
                 if (!actualHash.equals(signature.getDocumentHash())) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Campaign document hash mismatch");
                 }
 
-                // Record client signature
                 signature.setClientId(client.getId());
                 signature.setClientSignedAtUtc(Instant.now());
                 signature.setFullySigned(true);
@@ -194,7 +180,7 @@ public class ClientService {
     }
 
     private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
-        return campaignRepository.findById(campaignId)
+        return campaignRepository.findByIdWithDetails(campaignId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign not found"));
     }
 

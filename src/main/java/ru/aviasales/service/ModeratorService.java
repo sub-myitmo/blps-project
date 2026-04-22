@@ -58,7 +58,7 @@ public class ModeratorService {
                 }
                 validateConsentAccepted(request.getConsentAccepted());
 
-                CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+                CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                         .orElseGet(() -> {
                             CampaignSignature newSignature = new CampaignSignature();
                             newSignature.setCampaign(campaign);
@@ -75,7 +75,6 @@ public class ModeratorService {
                 signature.setModeratorId(moderator.getId());
                 signature.setModeratorSignedAtUtc(Instant.now());
 
-                // Reset client signing state for fresh cycle
                 signature.setClientId(null);
                 signature.setClientSignedAtUtc(null);
                 signature.setFullySigned(false);
@@ -96,7 +95,7 @@ public class ModeratorService {
         }
 
         Comment comment = new Comment();
-        comment.setModerator(moderator);
+        comment.setModeratorId(moderator.getId());
         comment.setModerationComment(request.getComment());
         comment.setCampaign(campaign);
         commentRepository.save(comment);
@@ -144,7 +143,7 @@ public class ModeratorService {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comment not found"));
 
-        if (!comment.getModerator().getId().equals(moderator.getId())) {
+        if (!comment.getModeratorId().equals(moderator.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot delete another moderator's comment");
         }
 
@@ -160,7 +159,7 @@ public class ModeratorService {
     @Transactional(readOnly = true)
     public CampaignSignatureDetailsResponse getCampaignSignature(Long id) {
         AdvertisingCampaign campaign = getCampaignOrThrow(id);
-        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+        CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign signature not found"));
         return CampaignSignatureDetailsResponse.fromEntity(signature);
     }
@@ -168,13 +167,13 @@ public class ModeratorService {
     @Transactional(readOnly = true)
     public byte[] getCampaignSignaturePdf(Long id) {
         AdvertisingCampaign campaign = getCampaignOrThrow(id);
-        CampaignSignature signature = campaignSignatureRepository.findByCampaign(campaign)
+        CampaignSignature signature = campaignSignatureRepository.findByCampaignId(campaign.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign signature not found"));
         return campaignDocumentPdfService.generatePdf(signature);
     }
 
     public List<CampaignResponse> getCampaignsByStatus(CampaignStatus status) {
-        List<AdvertisingCampaign> campaigns = campaignRepository.findByStatus(status);
+        List<AdvertisingCampaign> campaigns = campaignRepository.findByStatusWithDetails(status);
         return campaigns.stream()
                 .map(CampaignResponse::fromEntity)
                 .collect(Collectors.toList());
@@ -186,7 +185,7 @@ public class ModeratorService {
     }
 
     private AdvertisingCampaign getCampaignOrThrow(Long campaignId) {
-        return campaignRepository.findById(campaignId)
+        return campaignRepository.findByIdWithDetails(campaignId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign not found"));
     }
 

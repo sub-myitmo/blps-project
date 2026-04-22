@@ -20,11 +20,10 @@ public class Comment {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @ManyToOne
-    @JoinColumn(name = "moderator_id")
-    private Moderator moderator;
+    @Column(name = "moderator_id")
+    private Long moderatorId;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campaign_id")
     private AdvertisingCampaign campaign;
 
@@ -36,4 +35,3 @@ public class Comment {
         createdAt = LocalDateTime.now();
     }
 }
-

@@ -18,9 +18,8 @@ public class Transaction {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "client_id", nullable = false)
-    private Client client;
+    @Column(name = "client_id", nullable = false)
+    private Long clientId;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;

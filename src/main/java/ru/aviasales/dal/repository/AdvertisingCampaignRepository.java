@@ -9,23 +9,51 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.aviasales.dal.model.AdvertisingCampaign;
 import ru.aviasales.dal.model.CampaignStatus;
-import ru.aviasales.dal.model.Client;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AdvertisingCampaignRepository extends JpaRepository<AdvertisingCampaign, Long> {
 
-    List<AdvertisingCampaign> findByClient(Client client);
+    @Query("SELECT DISTINCT c FROM AdvertisingCampaign c " +
+            "JOIN FETCH c.client " +
+            "LEFT JOIN FETCH c.comments " +
+            "LEFT JOIN FETCH c.signature " +
+            "WHERE c.client.apiKey = :apiKey")
+    List<AdvertisingCampaign> findByClientIdWithDetails(@Param("apiKey") String apiKey);
 
-    List<AdvertisingCampaign> findByStatus(CampaignStatus status);
+    @Query("SELECT DISTINCT c FROM AdvertisingCampaign c " +
+            "JOIN FETCH c.client " +
+            "LEFT JOIN FETCH c.comments " +
+            "LEFT JOIN FETCH c.signature " +
+            "WHERE c.status = :status")
+    List<AdvertisingCampaign> findByStatusWithDetails(@Param("status") CampaignStatus status);
+
+    @Query("SELECT c FROM AdvertisingCampaign c " +
+            "JOIN FETCH c.client " +
+            "WHERE c.status = :status")
+    List<AdvertisingCampaign> findByStatusWithClient(@Param("status") CampaignStatus status);
+
+    @Query("SELECT DISTINCT c FROM AdvertisingCampaign c " +
+            "JOIN FETCH c.client " +
+            "LEFT JOIN FETCH c.comments " +
+            "LEFT JOIN FETCH c.signature " +
+            "WHERE c.id = :id")
+    Optional<AdvertisingCampaign> findByIdWithDetails(@Param("id") Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT c FROM AdvertisingCampaign c WHERE c.id = :id")
-    java.util.Optional<AdvertisingCampaign> findByIdForUpdate(@Param("id") Long id);
+    @Query("SELECT DISTINCT c FROM AdvertisingCampaign c " +
+            "JOIN FETCH c.client " +
+            "LEFT JOIN FETCH c.comments " +
+            "LEFT JOIN FETCH c.signature " +
+            "WHERE c.id = :id")
+    Optional<AdvertisingCampaign> findByIdForUpdate(@Param("id") Long id);
 
-    @Query("SELECT c FROM AdvertisingCampaign c WHERE c.status = 'WAITING_START' " +
+    @Query("SELECT c FROM AdvertisingCampaign c " +
+            "JOIN FETCH c.client " +
+            "WHERE c.status = 'WAITING_START' " +
             "AND (c.startDate IS NULL OR c.startDate <= :today) " +
             "AND (c.endDate IS NULL OR c.endDate >= :today)")
     List<AdvertisingCampaign> findReadyToStart(@Param("today") LocalDate today);
