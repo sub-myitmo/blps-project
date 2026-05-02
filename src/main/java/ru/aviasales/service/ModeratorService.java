@@ -8,6 +8,8 @@ import ru.aviasales.dal.model.*;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
 import ru.aviasales.dal.repository.CampaignSignatureRepository;
 import ru.aviasales.dal.repository.CommentRepository;
+import ru.aviasales.security.AuthorityCheck;
+import ru.aviasales.security.PrivilegeCodes;
 import ru.aviasales.service.doc.*;
 import ru.aviasales.service.dto.CampaignResponse;
 import ru.aviasales.service.dto.CampaignSignatureDetailsResponse;
@@ -44,6 +46,8 @@ public class ModeratorService {
     @Transactional
     public CampaignResponse actionCampaign(UserPrincipal principal, Long campaignId,
                                              ModeratorActionRequest request) {
+        AuthorityCheck.require(requiredPrivilegeFor(request.getAction()));
+
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
 
         switch (request.getAction()) {
@@ -63,7 +67,7 @@ public class ModeratorService {
                 campaign.transitionTo(CampaignStatus.PAUSED_BY_MODERATOR);
                 break;
             default:
-                throw new RuntimeException("Invalid action for moderation");
+                throw new IllegalArgumentException("Invalid action for moderation");
         }
 
         return CampaignResponse.fromEntity(campaignRepository.save(campaign));
@@ -91,6 +95,14 @@ public class ModeratorService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot delete a completed campaign");
         }
 
+        // Block hard-delete of signed campaigns to preserve audit trail.
+        CampaignSignature signature = campaign.getSignature();
+        if (signature != null && signature.isFullySigned()
+                && campaign.getStatus() != CampaignStatus.REJECTED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot delete a fully-signed campaign; use REJECT or PAUSE");
+        }
+
         campaignRepository.delete(campaign);
     }
 
@@ -99,8 +111,8 @@ public class ModeratorService {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comment not found"));
 
-        boolean admin = principal.getRole() == UserRole.ADMIN;
-        if (!admin && (comment.getModeratorId() == null
+        boolean canDeleteAny = AuthorityCheck.hasAuthority(PrivilegeCodes.COMMENT_DELETE_ANY);
+        if (!canDeleteAny && (comment.getModeratorId() == null
                 || !comment.getModeratorId().equals(principal.getModeratorId()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot delete another moderator's comment");
         }
@@ -158,9 +170,20 @@ public class ModeratorService {
     }
 
     private void validateConsentAccepted(Boolean consentAccepted) {
-        if (Boolean.FALSE.equals(consentAccepted)) {
-            throw new RuntimeException("Explicit electronic-signature consent is required");
+        if (!Boolean.TRUE.equals(consentAccepted)) {
+            throw new IllegalArgumentException("Explicit electronic-signature consent is required");
         }
+    }
+
+    private String requiredPrivilegeFor(ModeratorActionRequest.Action action) {
+        if (action == null) {
+            throw new IllegalArgumentException("Action is required");
+        }
+        return switch (action) {
+            case SIGN_DOC -> PrivilegeCodes.CAMPAIGN_MODERATE_SIGN;
+            case REJECT -> PrivilegeCodes.CAMPAIGN_REJECT;
+            case PAUSE -> PrivilegeCodes.CAMPAIGN_PAUSE_ANY;
+        };
     }
 
 }

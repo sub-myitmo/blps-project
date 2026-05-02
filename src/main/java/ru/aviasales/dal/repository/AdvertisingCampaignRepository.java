@@ -42,6 +42,15 @@ public interface AdvertisingCampaignRepository extends JpaRepository<Advertising
             "WHERE c.status = :status")
     List<AdvertisingCampaign> findByStatusWithClient(@Param("status") CampaignStatus status);
 
+    @Query("SELECT DISTINCT c.client.id FROM AdvertisingCampaign c WHERE c.status = :status")
+    List<Long> findClientIdsByStatus(@Param("status") CampaignStatus status);
+
+    @Query("SELECT c FROM AdvertisingCampaign c " +
+            "JOIN FETCH c.client " +
+            "WHERE c.status = :status AND c.client.id = :clientId")
+    List<AdvertisingCampaign> findByStatusAndClientId(@Param("status") CampaignStatus status,
+                                                     @Param("clientId") Long clientId);
+
     @Query("SELECT DISTINCT c FROM AdvertisingCampaign c " +
             "JOIN FETCH c.client " +
             "LEFT JOIN FETCH c.comments " +

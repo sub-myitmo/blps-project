@@ -3,6 +3,7 @@ package ru.aviasales.gateway.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import ru.aviasales.security.UserPrincipal;
@@ -21,6 +22,7 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PostMapping("/pay")
+    @PreAuthorize("hasAuthority('PAYMENT_TOPUP')")
     public ResponseEntity<Map<String, Object>> deposit(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PaymentRequest request) {
@@ -35,6 +37,7 @@ public class PaymentController {
     }
 
     @GetMapping("/balance")
+    @PreAuthorize("hasAuthority('PAYMENT_VIEW_OWN')")
     public ResponseEntity<Map<String, Object>> getBalance(
             @AuthenticationPrincipal UserPrincipal principal) {
         BigDecimal balance = paymentService.getBalance(principal.getClientId());

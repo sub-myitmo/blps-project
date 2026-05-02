@@ -14,14 +14,17 @@ import javax.security.auth.login.FailedLoginException;
 import javax.security.auth.login.LoginException;
 import javax.security.auth.spi.LoginModule;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class DbLoginModule implements LoginModule {
 
     private Subject subject;
     private CallbackHandler callbackHandler;
     private UserPrincipal userPrincipal;
-    private RolePrincipal rolePrincipal;
+    private final List<RolePrincipal> rolePrincipals = new ArrayList<>();
     private boolean authenticated;
 
     @Override
@@ -51,6 +54,7 @@ public class DbLoginModule implements LoginModule {
 
         UserAccountRepository accountRepository = ApplicationContextProvider.getBean(UserAccountRepository.class);
         PasswordEncoder passwordEncoder = ApplicationContextProvider.getBean(PasswordEncoder.class);
+        PrivilegeResolver privilegeResolver = ApplicationContextProvider.getBean(PrivilegeResolver.class);
 
         UserAccount account = accountRepository.findByUsernameWithOwners(username)
                 .orElseThrow(() -> new FailedLoginException("Invalid credentials"));
@@ -59,8 +63,20 @@ public class DbLoginModule implements LoginModule {
             throw new FailedLoginException("Invalid credentials");
         }
 
-        userPrincipal = UserPrincipal.fromAccount(account);
-        rolePrincipal = new RolePrincipal("ROLE_" + account.getRole().name());
+        Set<String> privileges;
+        try {
+            privileges = privilegeResolver.resolve(account.getRole());
+        } catch (RuntimeException e) {
+            LoginException wrapped = new LoginException("Failed to resolve privileges");
+            wrapped.initCause(e);
+            throw wrapped;
+        }
+        userPrincipal = UserPrincipal.fromAccount(account, privileges);
+        rolePrincipals.clear();
+        rolePrincipals.add(new RolePrincipal("ROLE_" + account.getRole().name()));
+        for (String privilege : privileges) {
+            rolePrincipals.add(new RolePrincipal(privilege));
+        }
         authenticated = true;
         return true;
     }
@@ -71,7 +87,7 @@ public class DbLoginModule implements LoginModule {
             return false;
         }
         subject.getPrincipals().add(userPrincipal);
-        subject.getPrincipals().add(rolePrincipal);
+        subject.getPrincipals().addAll(rolePrincipals);
         return true;
     }
 
@@ -84,7 +100,7 @@ public class DbLoginModule implements LoginModule {
     @Override
     public boolean logout() {
         subject.getPrincipals().remove(userPrincipal);
-        subject.getPrincipals().remove(rolePrincipal);
+        subject.getPrincipals().removeAll(rolePrincipals);
         clear();
         return true;
     }
@@ -102,6 +118,6 @@ public class DbLoginModule implements LoginModule {
     private void clear() {
         authenticated = false;
         userPrincipal = null;
-        rolePrincipal = null;
+        rolePrincipals.clear();
     }
 }

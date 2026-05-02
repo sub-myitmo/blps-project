@@ -37,11 +37,17 @@ public class StartupUserAccountSeeder implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         createAdminIfMissing();
-        createLegacyClientAccounts();
-        createLegacyManagerAccounts();
+        if (legacyAccountPassword != null && !legacyAccountPassword.isBlank()) {
+            createLegacyClientAccounts();
+            createLegacyManagerAccounts();
+        }
     }
 
     private void createAdminIfMissing() {
+        if (adminUsername == null || adminUsername.isBlank()
+                || adminPassword == null || adminPassword.isBlank()) {
+            return;
+        }
         if (userAccountRepository.existsByUsername(adminUsername)) {
             return;
         }

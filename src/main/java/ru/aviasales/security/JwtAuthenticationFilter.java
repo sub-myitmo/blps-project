@@ -25,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserAccountRepository userAccountRepository;
+    private final PrivilegeResolver privilegeResolver;
 
     @Override
     protected void doFilterInternal(
@@ -44,7 +45,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 userAccountRepository.findByUsernameWithOwners(username)
                         .filter(this::isAccountAllowed)
-                        .map(UserPrincipal::fromAccount)
+                        .map(account -> UserPrincipal.fromAccount(account,
+                                privilegeResolver.resolve(account.getRole())))
                         .ifPresent(principal -> {
                             UsernamePasswordAuthenticationToken authentication =
                                     new UsernamePasswordAuthenticationToken(

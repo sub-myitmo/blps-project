@@ -37,10 +37,6 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/client/**", "/api/payment/**").hasRole("CLIENT")
-                        .requestMatchers("/api/manager/**", "/api/moderator/**")
-                        .hasAnyRole("MANAGER", "ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

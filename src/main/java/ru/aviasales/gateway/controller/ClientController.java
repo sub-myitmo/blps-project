@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import ru.aviasales.service.dto.*;
@@ -22,12 +23,14 @@ public class ClientController {
     private final ClientService clientService;
 
     @GetMapping("")
+    @PreAuthorize("hasAuthority('CAMPAIGN_VIEW_OWN')")
     public ResponseEntity<List<CampaignResponse>> getCampaignsByClient(
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(clientService.getCampaignsByClient(principal.getClientId()));
     }
 
     @PostMapping("")
+    @PreAuthorize("hasAuthority('CAMPAIGN_CREATE')")
     public ResponseEntity<CampaignResponse> createCampaign(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CampaignRequest request) {
@@ -36,6 +39,7 @@ public class ClientController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('CAMPAIGN_UPDATE_OWN')")
     public ResponseEntity<CampaignResponse> updateCampaign(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long id,
@@ -45,6 +49,7 @@ public class ClientController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('CAMPAIGN_DELETE_OWN')")
     public ResponseEntity<Void> deleteCampaign(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long id) {
@@ -53,6 +58,7 @@ public class ClientController {
     }
 
     @PostMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('CAMPAIGN_SIGN_CLIENT','CAMPAIGN_PAUSE_OWN')")
     public ResponseEntity<CampaignResponse> actionWithCampaign(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long id,
@@ -62,6 +68,7 @@ public class ClientController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('CAMPAIGN_VIEW_OWN')")
     public ResponseEntity<CampaignResponse> getCampaign(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long id) {
@@ -70,6 +77,7 @@ public class ClientController {
     }
 
     @GetMapping("/{id}/signature")
+    @PreAuthorize("hasAuthority('CAMPAIGN_VIEW_OWN')")
     public ResponseEntity<CampaignSignatureDetailsResponse> getCampaignSignature(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long id) {
@@ -77,6 +85,7 @@ public class ClientController {
     }
 
     @GetMapping("/{id}/signature/pdf")
+    @PreAuthorize("hasAuthority('CAMPAIGN_VIEW_OWN')")
     public ResponseEntity<Void> getCampaignSignaturePdf(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long id) {

@@ -1,19 +1,37 @@
-curl -X GET http://localhost:8080/api/moderator/campaigns/PENDING -H "Authorization: moderator-key-1"
+#!/usr/bin/env bash
+# Moderator/manager flow. Requires MANAGER_TOKEN.
+set -euo pipefail
+BASE="${BASE:-http://localhost:8080}"
+: "${MANAGER_TOKEN:?Login as manager and export MANAGER_TOKEN first}"
+AUTH=(-H "Authorization: Bearer $MANAGER_TOKEN" -H "Content-Type: application/json")
 
-curl -X POST http://localhost:8080/api/moderator/campaigns/1 -H "Authorization: moderator-key-1" -H "Content-Type: application/json" -d '{"action": "SIGN_DOC","comment": "Кампания проверена, отправлена на подписание клиенту"}'
+echo "== List by status PENDING =="
+curl -sS -X GET "$BASE/api/moderator/campaigns/status/PENDING" -H "Authorization: Bearer $MANAGER_TOKEN"
+echo
 
-curl -X POST http://localhost:8080/api/moderator/campaigns/2 -H "Authorization: moderator-key-1" -H "Content-Type: application/json" -d '{"action": "REJECT","comment": "Контент содержит запрещенные материалы"}'
+echo "== Sign campaign 1 (PENDING -> AT_SIGNING) =="
+curl -sS -X POST "$BASE/api/moderator/campaigns/1" "${AUTH[@]}" -d '{"action":"SIGN_DOC","consentAccepted":true,"comment":"Проверено"}'
+echo
 
-curl -X POST http://localhost:8080/api/moderator/campaigns/3 -H "Authorization: moderator-key-1" -H "Content-Type: application/json" -d '{"action": "PAUSE","comment": "Нарушение правил после запуска. Приостановлено модератором"}'
+echo "== Reject campaign 2 =="
+curl -sS -X POST "$BASE/api/moderator/campaigns/2" "${AUTH[@]}" -d '{"action":"REJECT","comment":"Контент запрещён"}'
+echo
 
-curl -X GET http://localhost:8080/api/moderator/campaigns/1 -H "Authorization: moderator-key-1"
+echo "== Pause campaign 3 =="
+curl -sS -X POST "$BASE/api/moderator/campaigns/3" "${AUTH[@]}" -d '{"action":"PAUSE","comment":"Нарушение"}'
+echo
 
-curl -X GET http://localhost:8080/api/moderator/campaigns/REJECTED -H "Authorization: moderator-key-1"
+echo "== Add moderation comment to campaign 1 =="
+curl -sS -X POST "$BASE/api/moderator/campaigns/1/comments" "${AUTH[@]}" -d '{"comment":"Дополнительная заметка"}'
+echo
 
-curl -X GET http://localhost:8080/api/moderator/campaigns/AT_SIGNING -H "Authorization: moderator-key-1"
+echo "== List by status REJECTED =="
+curl -sS -X GET "$BASE/api/moderator/campaigns/status/REJECTED" -H "Authorization: Bearer $MANAGER_TOKEN"
+echo
 
-curl -X GET http://localhost:8080/api/moderator/campaigns/PAUSED_BY_MODERATOR -H "Authorization: moderator-key-1"
+echo "== Get campaign 1 =="
+curl -sS -X GET "$BASE/api/moderator/campaigns/1" -H "Authorization: Bearer $MANAGER_TOKEN"
+echo
 
-curl -X GET http://localhost:8080/api/moderator/campaigns/ACTIVE -H "Authorization: moderator-key-1"
-
-curl -X POST http://localhost:8080/api/moderator/campaigns/1 -H "Authorization: moderator-key-1" -H "Content-Type: application/json" -d '{"action": "INVALID_ACTION","comment": "Тест"}'
+echo "== Invalid action (expect 4xx) =="
+curl -sS -o /dev/null -w "HTTP %{http_code}\n" -X POST "$BASE/api/moderator/campaigns/1" "${AUTH[@]}" -d '{"action":"INVALID","comment":"x"}'

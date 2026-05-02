@@ -5,6 +5,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import ru.aviasales.dal.model.*;
+import ru.aviasales.security.AuthorityCheck;
+import ru.aviasales.security.PrivilegeCodes;
 import ru.aviasales.service.doc.*;
 import ru.aviasales.service.dto.*;
 import ru.aviasales.dal.repository.AdvertisingCampaignRepository;
@@ -103,6 +105,13 @@ public class ClientService {
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
         validateAccessOrThrow(clientId, campaign);
 
+        CampaignSignature signature = campaign.getSignature();
+        if (signature != null && signature.isFullySigned()
+                && campaign.getStatus() != CampaignStatus.REJECTED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot delete a fully-signed campaign");
+        }
+
         campaignRepository.delete(campaign);
     }
 
@@ -139,6 +148,8 @@ public class ClientService {
     @Transactional
     public CampaignResponse actionCampaign(Long clientId, Long campaignId,
                                            ClientActionRequest request) {
+        AuthorityCheck.require(requiredPrivilegeFor(request.getAction()));
+
         AdvertisingCampaign campaign = getCampaignForActionOrThrow(campaignId);
         Client client = validateAccessOrThrow(clientId, campaign);
 
@@ -182,7 +193,7 @@ public class ClientService {
                 campaign.transitionTo(CampaignStatus.PAUSED_BY_CLIENT);
                 break;
             default:
-                throw new RuntimeException("Invalid action for client");
+                throw new IllegalArgumentException("Invalid action for client");
         }
 
         return CampaignResponse.fromEntity(campaignRepository.save(campaign));
@@ -215,14 +226,14 @@ public class ClientService {
 
     private void validateDates(LocalDate startDate, LocalDate endDate) {
         if (startDate == null) {
-            throw new RuntimeException("Start date must be not null");
+            throw new IllegalArgumentException("Start date must be not null");
         }
         if (startDate.isBefore(LocalDate.now())) {
-            throw new RuntimeException("Start date cannot be in the past");
+            throw new IllegalArgumentException("Start date cannot be in the past");
         }
         if (endDate != null) {
             if (startDate.isAfter(endDate)) {
-                throw new RuntimeException("Start date must be before end date");
+                throw new IllegalArgumentException("Start date must be before end date");
             }
         }
     }
@@ -239,20 +250,30 @@ public class ClientService {
 
     private void validateUpdateDates(LocalDate requestedStartDate, LocalDate startDate, LocalDate endDate) {
         if (startDate == null) {
-            throw new RuntimeException("Start date must be not null");
+            throw new IllegalArgumentException("Start date must be not null");
         }
         if (requestedStartDate != null && requestedStartDate.isBefore(LocalDate.now())) {
-            throw new RuntimeException("Start date cannot be in the past");
+            throw new IllegalArgumentException("Start date cannot be in the past");
         }
         if (endDate != null && startDate.isAfter(endDate)) {
-            throw new RuntimeException("Start date must be before end date");
+            throw new IllegalArgumentException("Start date must be before end date");
         }
     }
 
     private void validateConsentAccepted(Boolean consentAccepted) {
-        if (Boolean.FALSE.equals(consentAccepted)) {
-            throw new RuntimeException("Explicit electronic-signature consent is required");
+        if (!Boolean.TRUE.equals(consentAccepted)) {
+            throw new IllegalArgumentException("Explicit electronic-signature consent is required");
         }
+    }
+
+    private String requiredPrivilegeFor(ClientActionRequest.ClientAction action) {
+        if (action == null) {
+            throw new IllegalArgumentException("Action is required");
+        }
+        return switch (action) {
+            case SIGN_DOC -> PrivilegeCodes.CAMPAIGN_SIGN_CLIENT;
+            case PAUSE, RESUME -> PrivilegeCodes.CAMPAIGN_PAUSE_OWN;
+        };
     }
 
     private void validateResumeAllowed(AdvertisingCampaign campaign) {

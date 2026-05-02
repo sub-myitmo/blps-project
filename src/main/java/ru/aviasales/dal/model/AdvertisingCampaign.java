@@ -62,7 +62,7 @@ public class AdvertisingCampaign {
         if (status.canTransitionTo(newStatus)) {
             this.status = newStatus;
         } else {
-            throw new RuntimeException("Действие недоступно");
+            throw new IllegalStateException("Действие недоступно");
         }
 
     }

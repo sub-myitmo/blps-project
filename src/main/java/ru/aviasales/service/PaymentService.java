@@ -22,7 +22,7 @@ public class PaymentService {
 
     @Transactional
     public BigDecimal deposit(Long clientId, PaymentRequest request) {
-        Client client = clientRepository.findActiveById(clientId)
+        Client client = clientRepository.findActiveByIdForUpdate(clientId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Client not found"));
 
         client.setBalance(client.getBalance().add(request.getAmount()));

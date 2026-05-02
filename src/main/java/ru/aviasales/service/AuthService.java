@@ -15,6 +15,7 @@ import ru.aviasales.dal.model.UserRole;
 import ru.aviasales.dal.repository.ClientRepository;
 import ru.aviasales.dal.repository.UserAccountRepository;
 import ru.aviasales.security.JwtService;
+import ru.aviasales.security.PrivilegeResolver;
 import ru.aviasales.security.UserPrincipal;
 import ru.aviasales.service.dto.ClientRegistrationRequest;
 import ru.aviasales.service.dto.LoginRequest;
@@ -33,6 +34,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final PrivilegeResolver privilegeResolver;
 
     @Transactional
     public LoginResponse registerClient(ClientRegistrationRequest request) {
@@ -53,7 +55,8 @@ public class AuthService {
         account.setClient(client);
         account = userAccountRepository.save(account);
 
-        UserPrincipal principal = UserPrincipal.fromAccount(account);
+        UserPrincipal principal = UserPrincipal.fromAccount(account,
+                privilegeResolver.resolve(account.getRole()));
         String token = jwtService.buildToken(principal);
         return LoginResponse.fromToken(token, jwtService.getExpiration(token), principal);
     }

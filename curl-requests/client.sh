@@ -1,23 +1,50 @@
-curl -X POST http://localhost:8080/api/client/campaigns -H "Authorization: client-key-1" -H "Content-Type: application/json" -d '{"name": "Новогодняя распродажа","content": "Скидки до 70% на все товары!","targetUrl": "https://shop.ru/new-year","dailyBudget": 150.00,"startDate": "'$(date -d "+1 day" +"%Y-%m-%d")'","endDate": "'$(date -d "+1 month" +"%Y-%m-%d")'"}'
+#!/usr/bin/env bash
+# Client happy-path. Requires CLIENT_TOKEN exported (run auth.sh first).
+set -euo pipefail
+BASE="${BASE:-http://localhost:8080}"
+: "${CLIENT_TOKEN:?Run auth.sh and export CLIENT_TOKEN first}"
+AUTH=(-H "Authorization: Bearer $CLIENT_TOKEN" -H "Content-Type: application/json")
 
-curl -X POST http://localhost:8080/api/client/campaigns -H "Authorization: client-key-2" -H "Content-Type: application/json" -d '{"name": "Летний фестиваль","content": "Фестиваль на открытом воздухе!","targetUrl": "https://shop.ru/summer-fest","dailyBudget": 200.00,"startDate": "'$(date -d "+2 days" +"%Y-%m-%d")'","endDate": "'$(date -d "+3 months" +"%Y-%m-%d")'"}'
+echo "== Create campaign (T+1 .. T+30) =="
+curl -sS -X POST "$BASE/api/client/campaigns" "${AUTH[@]}" -d '{
+    "name":"Новогодняя распродажа",
+    "content":"Скидки до 70% на все товары!",
+    "targetUrl":"https://shop.ru/new-year",
+    "dailyBudget":150.00,
+    "startDate":"'$(date -v+1d +%Y-%m-%d 2>/dev/null || date -d "+1 day" +%Y-%m-%d)'",
+    "endDate":"'$(date -v+30d +%Y-%m-%d 2>/dev/null || date -d "+30 days" +%Y-%m-%d)'"
+}'
+echo
 
-curl -X POST http://localhost:8080/api/client/campaigns -H "Authorization: client-key-3" -H "Content-Type: application/json" -d '{"name": "Акция выходного дня","content": "Только в субботу и воскресенье!","targetUrl": "https://shop.ru/weekend","dailyBudget": 300.00,"startDate": "'$(date -d "+3 days" +"%Y-%m-%d")'","endDate": "'$(date -d "+1 week" +"%Y-%m-%d")'"}'
+echo "== List own campaigns =="
+curl -sS -X GET "$BASE/api/client/campaigns" -H "Authorization: Bearer $CLIENT_TOKEN"
+echo
 
-curl -X GET http://localhost:8080/api/client/campaigns/1 -H "Authorization: client-key-1"
+echo "== View campaign 1 =="
+curl -sS -X GET "$BASE/api/client/campaigns/1" -H "Authorization: Bearer $CLIENT_TOKEN"
+echo
 
-curl -X POST http://localhost:8080/api/client/campaigns/1 -H "Authorization: client-key-1" -H "Content-Type: application/json" -d '{"action": "SIGN_DOC"}'
+echo "== Pause campaign 2 =="
+curl -sS -X POST "$BASE/api/client/campaigns/2" "${AUTH[@]}" -d '{"action":"PAUSE"}'
+echo
 
-curl -X POST http://localhost:8080/api/client/campaigns/2 -H "Authorization: client-key-2" -H "Content-Type: application/json" -d '{"action": "PAUSE"}'
+echo "== Resume campaign 2 =="
+curl -sS -X POST "$BASE/api/client/campaigns/2" "${AUTH[@]}" -d '{
+    "action":"RESUME",
+    "startDate":"'$(date -v+5d +%Y-%m-%d 2>/dev/null || date -d "+5 days" +%Y-%m-%d)'",
+    "endDate":"'$(date -v+90d +%Y-%m-%d 2>/dev/null || date -d "+90 days" +%Y-%m-%d)'"
+}'
+echo
 
-curl -X POST http://localhost:8080/api/client/campaigns/2 -H "Authorization: client-key-2" -H "Content-Type: application/json" -d '{"action": "RESUME","startDate": "'$(date -d "+5 days" +"%Y-%m-%d")'","endDate": "'$(date -d "+4 months" +"%Y-%m-%d")'"}'
+echo "== Sign campaign 1 (after moderator SIGN_DOC) =="
+curl -sS -X POST "$BASE/api/client/campaigns/1" "${AUTH[@]}" -d '{"action":"SIGN_DOC","consentAccepted":true}'
+echo
 
-curl -X POST http://localhost:8080/api/payment/pay -H "Authorization: client-key-3" -H "Content-Type: application/json" -d '{"amount": 500.00,"description": "Пополнение через банковскую карту"}'
+echo "== Get signature details =="
+curl -sS -X GET "$BASE/api/client/campaigns/1/signature" -H "Authorization: Bearer $CLIENT_TOKEN"
+echo
 
-curl -X GET http://localhost:8080/api/payment/balance -H "Authorization: client-key-1"
-
-curl -X GET http://localhost:8080/api/payment/balance -H "Authorization: client-key-3"
-
-curl -X GET http://localhost:8080/api/client/campaigns/3 -H "Authorization: client-key-1"
-
-curl -X POST http://localhost:8080/api/client/campaigns -H "Authorization: client-key-1" -H "Content-Type: application/json" -d '{"name": "Невалидная кампания","content": "Тест","targetUrl": "https://shop.ru/test","dailyBudget": 100.00,"startDate": "2020-01-01"}'
+echo "== Invalid: start date in past (expect 4xx) =="
+curl -sS -o /dev/null -w "HTTP %{http_code}\n" -X POST "$BASE/api/client/campaigns" "${AUTH[@]}" -d '{
+    "name":"Bad","content":"x","targetUrl":"https://x","dailyBudget":1,"startDate":"2020-01-01"
+}'
